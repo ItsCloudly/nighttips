@@ -1668,6 +1668,45 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 .bonus-karte .frage { font-weight: 700; font-size: 1.05rem; }
 .bonus-schluss { font-size: 0.8rem; color: var(--ink-2); margin: 2px 0 10px; }
 
+/* ----- Buchmacher-Quoten (v0.1.1) ----- */
+
+.quoten-zeile {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.quoten-pille {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  background: var(--karte-hoch);
+  border-radius: 12px;
+}
+
+.quoten-label {
+  font-family: var(--ns-mono);
+  font-size: 0.66rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.quoten-pille strong {
+  font-family: var(--ns-display);
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.quoten-prozent {
+  font-family: var(--ns-mono);
+  font-size: 0.72rem;
+  color: var(--akzent);
+  font-variant-numeric: tabular-nums;
+}
+
 /* ----- Private Spiel-Notizen (v0.1.1) ----- */
 
 .notiz-bereich { border: 0; }

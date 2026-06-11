@@ -1337,10 +1337,38 @@ function panelTippsHtml(detail, phase) {
     </section>`);
   }
   teile.push(ringTrioHtml(detail));
+  teile.push(quotenSektionHtml(detail, phase));
   teile.push(notizSektionHtml(detail));
   teile.push(analyseSektionHtml(detail, "prognose", "KI-Prognose"));
   teile.push(`<section class="lupe-abschnitt"><h3>Tipps der Runde</h3>${tippZeilenHtml(detail)}</section>`);
   return teile.join("");
+}
+
+/* Buchmacher-Quote (v0.1.1): 1X2-Dezimalquoten + daraus errechnete implizite
+   Wahrscheinlichkeiten (1/Quote, normalisiert) — nur vor dem Anpfiff. */
+function quotenSektionHtml(detail, phase) {
+  const quote = detail.quote;
+  if (!quote || phase !== "vor") return "";
+  const implizit = (wert) => 1 / wert;
+  const summe = implizit(quote.heim) + implizit(quote.remis) + implizit(quote.gast);
+  const eintraege = [
+    ["1", detail.heim?.fifa_code ?? "Heim", quote.heim],
+    ["X", "Remis", quote.remis],
+    ["2", detail.gast?.fifa_code ?? "Gast", quote.gast],
+  ];
+  return `<section class="lupe-abschnitt"><h3>Quoten
+      <span class="rang-detail">· ${escapeHtml(quote.anbieter)} · Stand ${lokaleUhrzeit(quote.abruf_utc)} Uhr</span></h3>
+    <div class="quoten-zeile">${eintraege
+      .map(
+        ([kuerzel, label, wert]) => `<span class="quoten-pille">
+        <span class="quoten-label">${kuerzel} · ${escapeHtml(String(label))}</span>
+        <strong>${Number(wert).toFixed(2)}</strong>
+        <span class="quoten-prozent">${Math.round((implizit(wert) / summe) * 100)} %</span>
+      </span>`
+      )
+      .join("")}</div>
+    <p class="hinweis">Buchmacher-Einschätzung — nur zur Orientierung.</p>
+  </section>`;
 }
 
 /* Private Notiz zum Spiel: zugeklappt eine Zeile, aufgeklappt Textarea mit

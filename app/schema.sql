@@ -235,6 +235,19 @@ CREATE TABLE IF NOT EXISTS bonustipp (
     UNIQUE (nutzer_id, bonusfrage_id)
 );
 
+-- Wettquoten (v0.1.1): 1X2-Dezimalquoten je Spiel von The Odds API
+-- (Anbieter z. B. Tipico). Reine Orientierung, täglich gesynct.
+CREATE TABLE IF NOT EXISTS quote (
+    id        INTEGER PRIMARY KEY,
+    spiel_id  INTEGER NOT NULL REFERENCES spiel(id) ON DELETE CASCADE,
+    anbieter  TEXT NOT NULL,
+    heim      REAL NOT NULL,
+    remis     REAL NOT NULL,
+    gast      REAL NOT NULL,
+    abruf_utc TEXT NOT NULL,
+    UNIQUE (spiel_id, anbieter)
+);
+
 -- Private Spiel-Notizen (v0.1.1): eigene Gedanken je Nutzer und Spiel.
 -- Strikt privat — taucht in keiner Tippliste und keinem Agenten-Export auf.
 CREATE TABLE IF NOT EXISTS notiz (

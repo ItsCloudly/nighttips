@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import db
 from .config import lade_einstellungen
-from .services import importer, nutzer as nutzer_service, sync
+from .services import importer, nutzer as nutzer_service, quoten, sync
 from .services.fussball_api import FussballApiFehler
 
 
@@ -36,7 +36,12 @@ def main(argv: list[str] | None = None) -> int:
         "job",
         nargs="?",
         default=sync.JOB_ERGEBNISSE,
-        choices=[sync.JOB_STAMMDATEN, sync.JOB_ERGEBNISSE, sync.JOB_VERGLEICHE],
+        choices=[
+            sync.JOB_STAMMDATEN,
+            sync.JOB_ERGEBNISSE,
+            sync.JOB_VERGLEICHE,
+            quoten.JOB_QUOTEN,
+        ],
     )
 
     args = parser.parse_args(argv)
@@ -75,9 +80,14 @@ def main(argv: list[str] | None = None) -> int:
                     # 1 Call pro Spiel, gedrosselt aufs Free-Tier-Limit —
                     # der erste Volllauf (104 Spiele) dauert gut 10 Minuten.
                     bericht = sync.vergleiche_sync(conn, einstellungen)
+                elif args.job == quoten.JOB_QUOTEN:
+                    if not quoten.aktiv(einstellungen):
+                        print("Kein WM26_QUOTEN_TOKEN gesetzt — Quoten bleiben aus.", file=sys.stderr)
+                        return 1
+                    bericht = quoten.quoten_sync(conn, einstellungen)
                 else:
                     bericht = sync.ergebnis_sync(conn, einstellungen)
-            except FussballApiFehler as fehler:
+            except (FussballApiFehler, quoten.QuotenFehler) as fehler:
                 print(f"Sync fehlgeschlagen: {fehler}", file=sys.stderr)
                 return 1
             print(f"Sync {bericht.job}: {bericht.zusammenfassung()}")

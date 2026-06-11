@@ -61,6 +61,11 @@ class Einstellungen:
     vapid_subject: str = "mailto:admin@example.invalid"
     tipp_erinnerung_minuten: int = 120
     anpfiff_erinnerung_minuten: int = 30
+    # Wettquoten via The Odds API (v0.1.1): leer = Quoten-Feature aus.
+    quoten_token: str = ""
+    quoten_basis_url: str = "https://api.the-odds-api.com/v4"
+    quoten_sport: str = "soccer_fifa_world_cup"
+    quoten_buchmacher: str = "tipico_de"
     # Gruppen-Passwort für die Selbst-Registrierung; leer = Registrierung deaktiviert.
     registrierung_passwort: str = ""
     # Rate-Limit (pro IP, gleitendes 60-s-Fenster) VOR der scrypt-Prüfung: wehrt
@@ -89,6 +94,10 @@ def lade_einstellungen() -> Einstellungen:
         vapid_subject=os.environ.get("WM26_VAPID_SUBJECT", "mailto:admin@example.invalid"),
         tipp_erinnerung_minuten=_int("WM26_TIPP_ERINNERUNG_MINUTEN", 120),
         anpfiff_erinnerung_minuten=_int("WM26_ANPFIFF_ERINNERUNG_MINUTEN", 30),
+        quoten_token=os.environ.get("WM26_QUOTEN_TOKEN", ""),
+        quoten_basis_url=os.environ.get("WM26_QUOTEN_BASIS_URL", "https://api.the-odds-api.com/v4"),
+        quoten_sport=os.environ.get("WM26_QUOTEN_SPORT", "soccer_fifa_world_cup"),
+        quoten_buchmacher=os.environ.get("WM26_QUOTEN_BUCHMACHER", "tipico_de"),
         registrierung_passwort=os.environ.get("WM26_REGISTRIERUNG_PASSWORT", ""),
         login_rate_pro_minute=_int("WM26_LOGIN_RATE_PRO_MINUTE", 12),
         registrierung_rate_pro_minute=_int("WM26_REGISTRIERUNG_RATE_PRO_MINUTE", 6),

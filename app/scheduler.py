@@ -18,7 +18,7 @@ from datetime import timedelta
 
 from . import db
 from .config import Einstellungen
-from .services import news, push, sync
+from .services import news, push, quoten, sync
 from .zeit import iso_utc, jetzt_utc
 
 logger = logging.getLogger("wm26.scheduler")
@@ -86,6 +86,13 @@ def _sync_lauf(einstellungen: Einstellungen) -> bool:
                     logger.info("RSS: %s neue Einträge, %s Fehler", rss.neu, rss.fehler)
         except Exception:
             logger.exception("RSS-Abruf fehlgeschlagen")
+        try:
+            if quoten.aktiv(einstellungen) and quoten.abruf_faellig(conn):
+                quoten_bericht = quoten.quoten_sync(conn, einstellungen)
+                logger.info("Sync %s: %s", quoten_bericht.job, quoten_bericht.zusammenfassung())
+        except Exception:
+            # Fehlerdetails stehen in sync_status; Quoten sind nie deploy-kritisch.
+            logger.exception("Quoten-Sync fehlgeschlagen")
         live_phase = _live_phase(conn)
         if not live_phase:
             # Ruhige Phasen nutzen: fehlende direkte Vergleiche der nächsten

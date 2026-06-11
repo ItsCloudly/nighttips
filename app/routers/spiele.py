@@ -142,6 +142,13 @@ def spiel_detail(
         (nutzer["id"], spiel_id),
     ).fetchone()
     spiel["notiz"] = dict(notiz) if notiz else None
+    # Buchmacher-Quote (v0.1.1): neuester Stand, nur Orientierung
+    quote = conn.execute(
+        "SELECT anbieter, heim, remis, gast, abruf_utc FROM quote"
+        " WHERE spiel_id = ? ORDER BY abruf_utc DESC, id DESC LIMIT 1",
+        (spiel_id,),
+    ).fetchone()
+    spiel["quote"] = dict(quote) if quote else None
     spiel["trainer"] = {
         "heim": _trainer_name(conn, zeile["heim_id"]),
         "gast": _trainer_name(conn, zeile["gast_id"]),
