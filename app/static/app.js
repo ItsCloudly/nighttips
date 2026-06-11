@@ -2111,8 +2111,145 @@ function koBaumHtml() {
       </div>`
     )
     .join("");
-  return `<p class="hinweis baum-hinweis">→ seitlich wischen · Spiel antippen für Details</p>
-    <div class="baum">${spalten}</div>`;
+  return `<div class="baum-kopfzeile">
+      <p class="hinweis baum-hinweis">Ziehen · kneifen oder doppeltippen zum Zoomen · Spiel antippen</p>
+      <button type="button" class="klein baum-reset" data-baum-reset hidden>⤢ Übersicht</button>
+    </div>
+    <div class="baum-buehne" data-baum-buehne>
+      <div class="baum-leinwand"><div class="baum">${spalten}</div></div>
+    </div>`;
+}
+
+/* Freier Zoom & Pan für den K.o.-Baum (v0.1.1): ein Finger/Maus zieht,
+   zwei Finger kneifen, Doppeltipp auf freie Fläche zoomt, Ctrl+Scrollrad
+   am Desktop. Klicks auf Spiele/Teams bleiben Klicks (Bewegungs-Schwelle);
+   ohne JS bleibt das native seitliche Scrollen als Fallback. */
+function baumZoomEinrichten() {
+  const buehne = el("turnierInhalt").querySelector("[data-baum-buehne]");
+  if (!buehne) return;
+  const leinwand = buehne.querySelector(".baum-leinwand");
+  const reset = el("turnierInhalt").querySelector("[data-baum-reset]");
+  buehne.classList.add("aktiv");
+
+  const ansicht = { skala: 1, x: 0, y: 0 };
+  const zeiger = new Map(); // pointerId → {x, y, startX, startY}
+  let pinchStart = null;
+  let bewegt = false;
+
+  const anwenden = () => {
+    leinwand.style.transform = `translate(${ansicht.x}px, ${ansicht.y}px) scale(${ansicht.skala})`;
+    const standard = ansicht.skala === 1 && ansicht.x === 0 && ansicht.y === 0;
+    reset.hidden = standard;
+  };
+  const begrenzen = () => {
+    ansicht.skala = Math.min(2.5, Math.max(0.4, ansicht.skala));
+    // Pan locker einhegen: mindestens ein Stück Baum bleibt immer sichtbar
+    const rand = 70;
+    const breite = leinwand.scrollWidth * ansicht.skala;
+    const hoehe = leinwand.scrollHeight * ansicht.skala;
+    ansicht.x = Math.min(buehne.clientWidth - rand, Math.max(rand - breite, ansicht.x));
+    ansicht.y = Math.min(buehne.clientHeight - rand, Math.max(rand - hoehe, ansicht.y));
+  };
+  const zoomUm = (faktor, punktX, punktY) => {
+    const neu = Math.min(2.5, Math.max(0.4, ansicht.skala * faktor));
+    const echt = neu / ansicht.skala;
+    ansicht.x = punktX - (punktX - ansicht.x) * echt;
+    ansicht.y = punktY - (punktY - ansicht.y) * echt;
+    ansicht.skala = neu;
+    begrenzen();
+    anwenden();
+  };
+  const buehnenPunkt = (ereignis) => {
+    const box = buehne.getBoundingClientRect();
+    return [ereignis.clientX - box.left, ereignis.clientY - box.top];
+  };
+
+  buehne.addEventListener("pointerdown", (ereignis) => {
+    zeiger.set(ereignis.pointerId, {
+      x: ereignis.clientX,
+      y: ereignis.clientY,
+      startX: ereignis.clientX,
+      startY: ereignis.clientY,
+    });
+    if (zeiger.size === 1) bewegt = false;
+    if (zeiger.size === 2) {
+      const [a, b] = [...zeiger.values()];
+      pinchStart = { abstand: Math.hypot(a.x - b.x, a.y - b.y), skala: ansicht.skala };
+    }
+    buehne.setPointerCapture(ereignis.pointerId);
+  });
+  buehne.addEventListener("pointermove", (ereignis) => {
+    const punkt = zeiger.get(ereignis.pointerId);
+    if (!punkt) return;
+    const dx = ereignis.clientX - punkt.x;
+    const dy = ereignis.clientY - punkt.y;
+    punkt.x = ereignis.clientX;
+    punkt.y = ereignis.clientY;
+    if (Math.hypot(ereignis.clientX - punkt.startX, ereignis.clientY - punkt.startY) > 8) {
+      bewegt = true;
+    }
+    if (zeiger.size === 1) {
+      ansicht.x += dx;
+      ansicht.y += dy;
+      begrenzen();
+      anwenden();
+    } else if (zeiger.size === 2 && pinchStart) {
+      const [a, b] = [...zeiger.values()];
+      const abstand = Math.hypot(a.x - b.x, a.y - b.y);
+      if (abstand > 0 && pinchStart.abstand > 0) {
+        const box = buehne.getBoundingClientRect();
+        const mitteX = (a.x + b.x) / 2 - box.left;
+        const mitteY = (a.y + b.y) / 2 - box.top;
+        zoomUm((pinchStart.skala * (abstand / pinchStart.abstand)) / ansicht.skala, mitteX, mitteY);
+      }
+    }
+  });
+  const loslassen = (ereignis) => {
+    zeiger.delete(ereignis.pointerId);
+    if (zeiger.size < 2) pinchStart = null;
+  };
+  buehne.addEventListener("pointerup", loslassen);
+  buehne.addEventListener("pointercancel", loslassen);
+
+  // Nach echtem Ziehen darf der Klick darunter nicht mehr feuern
+  buehne.addEventListener(
+    "click",
+    (ereignis) => {
+      if (bewegt) {
+        ereignis.stopPropagation();
+        ereignis.preventDefault();
+      }
+    },
+    true
+  );
+  buehne.addEventListener("dblclick", (ereignis) => {
+    if (ereignis.target.closest("button")) return;
+    const [x, y] = buehnenPunkt(ereignis);
+    if (ansicht.skala > 1.05) {
+      ansicht.skala = 1;
+      ansicht.x = 0;
+      ansicht.y = 0;
+      anwenden();
+    } else {
+      zoomUm(1.6, x, y);
+    }
+  });
+  buehne.addEventListener(
+    "wheel",
+    (ereignis) => {
+      if (!ereignis.ctrlKey) return; // normales Scrollen nicht kapern
+      ereignis.preventDefault();
+      const [x, y] = buehnenPunkt(ereignis);
+      zoomUm(ereignis.deltaY < 0 ? 1.15 : 0.87, x, y);
+    },
+    { passive: false }
+  );
+  reset.addEventListener("click", () => {
+    ansicht.skala = 1;
+    ansicht.x = 0;
+    ansicht.y = 0;
+    anwenden();
+  });
 }
 
 async function turnierRendern() {
@@ -2122,6 +2259,7 @@ async function turnierRendern() {
     inhalt.innerHTML = gruppenGitterHtml(tabellen);
   } else {
     inhalt.innerHTML = koBaumHtml();
+    baumZoomEinrichten();
   }
 }
 

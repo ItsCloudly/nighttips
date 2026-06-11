@@ -1958,19 +1958,45 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 }
 .gruppe-fuss { font-size: 0.7rem; color: var(--ink-2); text-align: left; margin-top: 8px; }
 
-.baum-hinweis { margin: 0 2px 8px; }
+.baum-kopfzeile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 2px 8px;
+}
+
+.baum-hinweis { margin: 0; }
+
+/* Bühne + Leinwand: ohne JS scrollt die Bühne nativ seitlich (Fallback),
+   mit JS (.aktiv) übernehmen Zoom-/Pan-Gesten die Leinwand-Transformation. */
+.baum-buehne {
+  overflow-x: auto;
+  border-radius: 16px;
+}
+
+.baum-buehne.aktiv {
+  overflow: hidden;
+  touch-action: none;
+  cursor: grab;
+  background: color-mix(in srgb, var(--karte) 40%, transparent);
+}
+
+.baum-buehne.aktiv:active { cursor: grabbing; }
+
+.baum-leinwand {
+  transform-origin: 0 0;
+  width: max-content;
+}
 
 .baum {
   display: flex;
   gap: 14px;
-  overflow-x: auto;
   padding: 4px 2px 16px;
-  scroll-snap-type: x proximity;
 }
 
 .baum-spalte {
   flex: 0 0 240px;
-  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1984,7 +2010,29 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
   color: var(--ink-2);
   text-align: center;
   margin: 0 0 2px;
+  padding-bottom: 6px;
+  position: relative;
 }
+
+/* Runden-Akzente: jede Spalte bekommt ihre Farbe (3er-Zyklus der Tokens) */
+.baum-spalte h3::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 28px;
+  height: 3px;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  background: currentColor;
+  opacity: 0.85;
+}
+
+.baum-spalte:nth-child(3n + 1) h3 { color: var(--ns-green); }
+.baum-spalte:nth-child(3n + 2) h3 { color: var(--ns-cyan); }
+.baum-spalte:nth-child(3n + 3) h3 { color: var(--ns-gold); }
+
+.baum-reset { flex-shrink: 0; }
 
 .platz3-titel { margin-top: 18px !important; }
 
