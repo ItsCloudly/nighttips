@@ -36,7 +36,8 @@ def optionaler_nutzer(
     if not token:
         return None
     return conn.execute(
-        "SELECT n.id, n.anzeigename, n.rolle, n.ki_freigeschaltet, n.tipp_erinnerung_minuten"
+        "SELECT n.id, n.anzeigename, n.rolle, n.ki_freigeschaltet,"
+        " n.tipp_erinnerung_minuten, n.profilbild"
         " FROM sitzung s JOIN nutzer n ON n.id = s.nutzer_id"
         " WHERE s.token_hash = ? AND s.ablauf_utc > ?",
         (token_hashen(token), jetzt_iso()),

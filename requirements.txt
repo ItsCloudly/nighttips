@@ -4,4 +4,6 @@ uvicorn>=0.30
 httpx>=0.27
 pywebpush>=2.0
 defusedxml>=0.7
+# Profilbilder (v0.1.1): Verifikation + Re-Encode der Uploads
+Pillow>=11
 pytest>=8

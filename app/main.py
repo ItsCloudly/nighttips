@@ -20,6 +20,7 @@ from .routers import (
     news_bonus,
     notizen,
     pins,
+    profil,
     spiele,
     stream,
     tipps,
@@ -99,6 +100,7 @@ def create_app(einstellungen: Einstellungen | None = None) -> FastAPI:
     app.include_router(news_bonus.router)
     app.include_router(notizen.router)
     app.include_router(feedback.router)
+    app.include_router(profil.router)
     app.include_router(agenten.router)
 
     @app.get("/api/health")

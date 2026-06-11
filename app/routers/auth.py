@@ -145,6 +145,7 @@ def me(
         rolle=nutzer["rolle"],
         ki_freigeschaltet=bool(nutzer["ki_freigeschaltet"]),
         tipp_erinnerung_minuten=nutzer["tipp_erinnerung_minuten"],
+        profilbild=nutzer["profilbild"],
     )
 
 

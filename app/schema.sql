@@ -161,7 +161,10 @@ CREATE TABLE IF NOT EXISTS nutzer (
     rangliste_sichtbar INTEGER NOT NULL DEFAULT 1,
     -- Persönliche Vorlaufzeit der Tipp-Erinnerung in Minuten:
     -- NULL = Server-Standard (WM26_TIPP_ERINNERUNG_MINUTEN), 0 = keine Erinnerung.
-    tipp_erinnerung_minuten INTEGER
+    tipp_erinnerung_minuten INTEGER,
+    -- Dateiname des Profilbilds in daten/profilbilder/ (NULL = Initiale).
+    -- Der Zeitstempel im Namen macht die Auslieferungs-URL cache-sicher.
+    profilbild TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tipp (

@@ -178,7 +178,7 @@ def rangliste(
     ki_filter = " WHERE n.rangliste_sichtbar = 1" + ("" if mit_ki else " AND n.rolle != 'ki'")
     zeilen = conn.execute(
         f"""
-        SELECT n.id, n.anzeigename, n.rolle,
+        SELECT n.id, n.anzeigename, n.rolle, n.profilbild,
                COALESCE(SUM(t.punkte), 0) AS tipp_punkte,
                COUNT(t.id) AS tipps_gewertet,
                SUM(CASE WHEN t.punkte = ? THEN 1 ELSE 0 END) AS exakt,
@@ -225,6 +225,7 @@ def rangliste(
                 "nutzer_id": zeile["id"],
                 "anzeigename": zeile["anzeigename"],
                 "rolle": zeile["rolle"],
+                "profilbild": zeile["profilbild"],
                 "punkte": punkte,
                 "bonus_punkte": zeile["bonus_punkte"] if mit_bonus else 0,
                 "tipps_gewertet": zeile["tipps_gewertet"],

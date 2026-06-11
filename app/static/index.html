@@ -9,9 +9,9 @@
 <link rel="icon" href="/icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <link rel="preload" href="/fonts/space-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/styles.css?v=28">
+<link rel="stylesheet" href="/styles.css?v=29">
 <!-- FOUC-Schutz: Modus vor dem ersten Rendern setzen; extern statt inline (CSP) -->
-<script src="/boot.js?v=28"></script>
+<script src="/boot.js?v=29"></script>
 </head>
 <body>
 <div class="app-shell">
@@ -225,6 +225,20 @@
           <h2>Konto</h2>
           <p id="kontoInfo"></p>
           <div class="einstellung-liste">
+            <div class="toggle-zeile" id="profilZeile">
+              <span class="profil-identitaet">
+                <span id="kontoAvatar"></span>
+                <span><strong id="nameAktuell"></strong><br>
+                  <span class="hinweis-zeile">Profilbild &amp; Name</span></span>
+              </span>
+              <span class="fuss-knoepfe">
+                <button type="button" class="klein" id="profilbildKnopf">Bild</button>
+                <button type="button" class="klein gefahr" id="profilbildLoeschen" hidden>✕</button>
+                <button type="button" class="klein" id="nameKnopf">Name</button>
+              </span>
+              <input id="profilbildDatei" type="file"
+                     accept="image/png,image/jpeg,image/webp" hidden>
+            </div>
             <label class="toggle-zeile master" id="pushZeile" hidden>
               <span><strong>Benachrichtigungen</strong><br>
                 <span class="hinweis-zeile">Tore, Anpfiff &amp; Endstand aufs Handy</span></span>
@@ -407,6 +421,6 @@
 
   <div id="toast" class="toast" hidden></div>
 </div>
-<script src="/app.js?v=28"></script>
+<script src="/app.js?v=29"></script>
 </body>
 </html>

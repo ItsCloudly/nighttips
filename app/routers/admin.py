@@ -21,6 +21,7 @@ from ..services import (
     news,
     nutzer as nutzer_service,
     overrides,
+    profilbilder,
     sync,
     tippspiel,
 )
@@ -56,7 +57,8 @@ def nutzer_liste(
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
 ) -> list[dict[str, Any]]:
     zeilen = conn.execute(
-        "SELECT id, anzeigename, rolle, ki_freigeschaltet, rangliste_sichtbar, erstellt_utc"
+        "SELECT id, anzeigename, rolle, ki_freigeschaltet, rangliste_sichtbar,"
+        " profilbild, erstellt_utc"
         " FROM nutzer ORDER BY anzeigename COLLATE NOCASE"
     ).fetchall()
     # bool statt SQLite-0/1, konsistent mit /api/me und /api/login
@@ -681,6 +683,24 @@ def sync_status(
 ) -> list[dict[str, Any]]:
     zeilen = conn.execute("SELECT * FROM sync_status ORDER BY job").fetchall()
     return [dict(zeile) for zeile in zeilen]
+
+
+@router.delete("/nutzer/{nutzer_id}/profilbild", status_code=204)
+def nutzer_profilbild_entfernen(
+    nutzer_id: int,
+    admin: Annotated[sqlite3.Row, Depends(admin_nutzer)],
+    conn: Annotated[sqlite3.Connection, Depends(get_db)],
+    einstellungen: Annotated[Einstellungen, Depends(get_einstellungen)],
+) -> None:
+    """Moderation: ein unpassendes Profilbild entfernen (v0.1.1)."""
+    ziel = conn.execute(
+        "SELECT profilbild FROM nutzer WHERE id = ?", (nutzer_id,)
+    ).fetchone()
+    if ziel is None:
+        raise HTTPException(status_code=404, detail="Nutzer nicht gefunden")
+    profilbilder.loeschen(einstellungen, ziel["profilbild"])
+    with db.schreib_transaktion(conn):
+        conn.execute("UPDATE nutzer SET profilbild = NULL WHERE id = ?", (nutzer_id,))
 
 
 # ---------- Feedback-Posteingang (v0.1.1) ----------

@@ -1532,7 +1532,7 @@ function panelStatistikHtml(detail, phase) {
         <div class="tipper-karten">${gewertet
           .map(
             (tipp) => `<div class="tipper-karte">
-          <span class="tipper-avatar">${escapeHtml(tipp.anzeigename.slice(0, 1).toUpperCase())}</span>
+          ${avatarHtml(tipp)}
           <span class="tipper-name">${escapeHtml(tipp.anzeigename)}${
             tipp.rolle === "ki" ? ' <span class="ki">KI</span>' : ""
           }</span>
@@ -2449,6 +2449,7 @@ async function ranglisteLaden() {
             const ki = eintrag.rolle === "ki" ? '<span class="ki">KI</span>' : "";
             return `<div class="podium-platz ${klassen[index]}">
             <div class="podium-medaille">${medaillen[eintrag.platz - 1] ?? ""}</div>
+            ${avatarHtml(eintrag, "tipper-avatar podium-avatar")}
             <div class="podium-name">${escapeHtml(eintrag.anzeigename)}${ki}</div>
             <div class="podium-punkte">${eintrag.punkte}</div>
             <div class="podium-detail">${eintrag.exakt}× exakt</div>
@@ -2466,7 +2467,7 @@ async function ranglisteLaden() {
         const bonus = eintrag.bonus_punkte ? ` title="inkl. +${eintrag.bonus_punkte} Bonus"` : "";
         return `<tr>
           <td class="num rang-platz">${eintrag.platz}</td>
-          <td class="rang-name">${escapeHtml(eintrag.anzeigename)}${ki}</td>
+          <td class="rang-name">${avatarHtml(eintrag, "tipper-avatar mini")}${escapeHtml(eintrag.anzeigename)}${ki}</td>
           <td class="num">${eintrag.tipps_gewertet}</td>
           <td class="num">${eintrag.exakt}</td>
           <td class="num">${eintrag.differenz}</td>
@@ -2507,6 +2508,17 @@ function tipperFormkette(form) {
   return `<span class="formkette klein" aria-label="Letzte Tipps">${form
     .map((punkte) => `<span class="form-punkt ${klasse(punkte)}">${punkte}</span>`)
     .join("")}</span>`;
+}
+
+/* Avatar (v0.1.1): Profilbild falls vorhanden, sonst Initiale.
+   Die URL trägt den Dateinamen als Version — neue Bilder umgehen den Cache. */
+function avatarHtml(person, klasse = "tipper-avatar") {
+  const id = person.nutzer_id ?? person.id;
+  const initiale = escapeHtml(String(person.anzeigename ?? "?").slice(0, 1).toUpperCase());
+  const bild = person.profilbild && id
+    ? `<img src="/api/profilbilder/${id}?v=${encodeURIComponent(person.profilbild)}" alt="" loading="lazy">`
+    : "";
+  return `<span class="${klasse}">${initiale}${bild}</span>`;
 }
 
 function bonusAntwortFeld(frage) {
@@ -2960,6 +2972,10 @@ async function nutzerLaden() {
           const sichtbarKnopf = `<button class="klein${person.rangliste_sichtbar ? "" : " gefahr"}"
                  data-nutzer-sichtbar="${person.id}" data-sichtbar-neu="${person.rangliste_sichtbar ? 0 : 1}">
                  Rangliste: ${person.rangliste_sichtbar ? "an" : "aus"}</button>`;
+          const bildKnopf = person.profilbild
+            ? `<button class="klein gefahr" data-nutzer-bild="${person.id}"
+                 data-nutzer-name="${escapeHtml(person.anzeigename)}">Bild löschen</button>`
+            : "";
           return `<div class="verwaltungszeile">
             <span>${escapeHtml(person.anzeigename)}<span class="rollen-chip ${person.rolle}">${person.rolle}</span>${
               ich ? ' <span class="neben">(du)</span>' : ""
@@ -2967,6 +2983,7 @@ async function nutzerLaden() {
             <span class="fuss-knoepfe">
               ${kiKnopf}
               ${sichtbarKnopf}
+              ${bildKnopf}
               <button class="klein" data-nutzer-pin="${person.id}"
                 data-nutzer-name="${escapeHtml(person.anzeigename)}">PIN</button>
               ${
@@ -3161,6 +3178,57 @@ function mehrEreignisse() {
     }
     zeigeLogin();
   });
+  // Profil (v0.1.1): Bild hochladen/entfernen, Name ändern
+  el("profilbildKnopf").addEventListener("click", () => el("profilbildDatei").click());
+  el("profilbildDatei").addEventListener("change", async (ereignis) => {
+    const datei = ereignis.target.files?.[0];
+    ereignis.target.value = "";
+    if (!datei) return;
+    if (datei.size > 2 * 1024 * 1024) {
+      toast("Das Bild ist zu groß (max. 2 MB).", true);
+      return;
+    }
+    try {
+      // Roher Body statt Multipart — der eigene api()-Helfer würde JSON-Header setzen
+      const antwort = await fetch("/api/me/profilbild", { method: "PUT", body: datei });
+      if (!antwort.ok) {
+        const fehler = await antwort.json().catch(() => ({}));
+        throw new Error(fehler.detail ?? `Fehler ${antwort.status}`);
+      }
+      const daten = await antwort.json();
+      if (zustand.nutzer) zustand.nutzer.profilbild = daten.profilbild;
+      kontoRendern();
+      toast("Profilbild gespeichert ✓");
+    } catch (fehler) {
+      fehlerAnzeigen(fehler);
+    }
+  });
+  el("profilbildLoeschen").addEventListener("click", async () => {
+    try {
+      await api("/api/me/profilbild", { method: "DELETE" });
+      if (zustand.nutzer) zustand.nutzer.profilbild = null;
+      kontoRendern();
+      toast("Profilbild entfernt");
+    } catch (fehler) {
+      fehlerAnzeigen(fehler);
+    }
+  });
+  el("nameKnopf").addEventListener("click", async () => {
+    const neu = prompt("Neuer Anzeigename:", zustand.nutzer?.anzeigename ?? "");
+    if (!neu || !neu.trim() || neu.trim() === zustand.nutzer?.anzeigename) return;
+    try {
+      const daten = await api("/api/me/name", {
+        method: "POST",
+        body: JSON.stringify({ anzeigename: neu.trim() }),
+      });
+      if (zustand.nutzer) zustand.nutzer.anzeigename = daten.anzeigename;
+      kontoRendern();
+      toast("Name geändert ✓");
+    } catch (fehler) {
+      fehlerAnzeigen(fehler);
+    }
+  });
+
   el("pushSchalter").addEventListener("change", pushUmschalten);
   el("erinnerungVorlauf").addEventListener("change", async (ereignis) => {
     try {
@@ -3276,6 +3344,7 @@ function mehrEreignisse() {
   el("nutzerListe").addEventListener("click", async (ereignis) => {
     const kiKnopf = ereignis.target.closest("[data-nutzer-ki]");
     const sichtbarKnopf = ereignis.target.closest("[data-nutzer-sichtbar]");
+    const bildKnopf = ereignis.target.closest("[data-nutzer-bild]");
     const pinResetKnopf = ereignis.target.closest("[data-nutzer-pin]");
     const loeschKnopf = ereignis.target.closest("[data-nutzer-loeschen]");
     try {
@@ -3296,6 +3365,15 @@ function mehrEreignisse() {
             ? "Konto zählt wieder in der Rangliste ✓"
             : "Konto aus Rangliste & Co. ausgeblendet"
         );
+        await nutzerLaden();
+      } else if (
+        bildKnopf &&
+        confirm(`Profilbild von '${bildKnopf.dataset.nutzerName}' entfernen?`)
+      ) {
+        await api(`/api/admin/nutzer/${bildKnopf.dataset.nutzerBild}/profilbild`, {
+          method: "DELETE",
+        });
+        toast("Profilbild entfernt");
         await nutzerLaden();
       } else if (pinResetKnopf) {
         const neuePin = prompt(
@@ -3440,14 +3518,21 @@ async function syncStarten(job) {
 
 /* ---------- Start ---------- */
 
-async function appStarten(zielAnsicht = "heute") {
+function kontoRendern() {
+  const nutzer = zustand.nutzer;
+  if (!nutzer) return;
   const kiSichtbar =
-    zustand.nutzer.rolle === "admin" ||
-    zustand.nutzer.rolle === "ki" ||
-    Boolean(zustand.nutzer.ki_freigeschaltet);
+    nutzer.rolle === "admin" || nutzer.rolle === "ki" || Boolean(nutzer.ki_freigeschaltet);
   el("kontoInfo").textContent =
-    `Angemeldet als ${zustand.nutzer.anzeigename} (${zustand.nutzer.rolle})` +
+    `Angemeldet als ${nutzer.anzeigename} (${nutzer.rolle})` +
     (kiSichtbar ? " · KI-Wertung freigeschaltet" : "");
+  el("kontoAvatar").innerHTML = avatarHtml(nutzer);
+  el("nameAktuell").textContent = nutzer.anzeigename;
+  el("profilbildLoeschen").hidden = !nutzer.profilbild;
+}
+
+async function appStarten(zielAnsicht = "heute") {
+  kontoRendern();
   el("adminBereich").hidden = zustand.nutzer.rolle !== "admin";
   await spieleLaden();
   zeigeAnsicht(zielAnsicht);

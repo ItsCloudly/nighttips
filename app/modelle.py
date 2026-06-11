@@ -29,10 +29,16 @@ class NutzerInfo(BaseModel):
     ki_freigeschaltet: bool = False
     # Persönliche Vorlaufzeit der Tipp-Erinnerung (None = Server-Standard, 0 = aus)
     tipp_erinnerung_minuten: int | None = Field(default=None, ge=0, le=720)
+    # Dateiname des Profilbilds (None = Initialen-Avatar)
+    profilbild: str | None = None
 
 
 class ErinnerungsEinstellung(BaseModel):
     tipp_erinnerung_minuten: int = Field(ge=0, le=720)
+
+
+class NameAenderung(BaseModel):
+    anzeigename: str = Field(min_length=1, max_length=50)
 
 
 class NeuerNutzer(BaseModel):
