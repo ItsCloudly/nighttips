@@ -170,6 +170,23 @@ def test_uebliche_startelf_und_team_endpoint(client, conn, einstellungen, welt):
     assert client.get(f"/api/teams/{welt['mex']}").json()["startelf"] is None
 
 
+def test_duell_aufstellungen_im_spiel_detail(client, conn, einstellungen, welt):
+    """Das Spiel-Detail liefert beide Startelfen fürs Duell-Feld."""
+    client.post("/api/login", json={"anzeigename": "Mia", "pin": "123456"})
+    # Vor dem Sync: Sektion bleibt leer
+    assert client.get(f"/api/spiele/{welt['spiel']}").json()["aufstellungen"] is None
+
+    aufstellungen.aufstellungen_sync(
+        conn, einstellungen, scoreboard=_scoreboard(), summary_lader=lambda ref: _summary()
+    )
+    detail = client.get(f"/api/spiele/{welt['spiel']}").json()
+    duell = detail["aufstellungen"]
+    assert len(duell["heim"]["startelf"]) == 11
+    assert len(duell["gast"]["startelf"]) == 11
+    assert duell["heim"]["formation"] == "4-3-3"
+    assert duell["heim"]["startelf"][0]["position"] == "Torwart"
+
+
 def test_iso_normalisierung():
     assert aufstellungen._iso_normalisieren("2026-06-11T19:00Z") == "2026-06-11T19:00:00Z"
     assert aufstellungen._iso_normalisieren("2026-06-11T19:00:00Z") == "2026-06-11T19:00:00Z"

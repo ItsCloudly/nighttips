@@ -1647,6 +1647,13 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 .feld-spieler text { fill: var(--ink); font-weight: 700; }
 .feld-spieler .feld-name { fill: var(--ink-2); font-weight: 600; }
 
+/* Duell-Feld (beide Startelfen, v0.1.1): Teamfarben statt Akzent-Ringe */
+.duell-feld .feld-spieler circle { stroke: rgba(255, 255, 255, 0.55); stroke-width: 1.2; }
+.duell-feld .feld-spieler:hover circle { stroke-width: 2.6; }
+.duell-feld .feld-name { fill: rgba(255, 255, 255, 0.78); }
+.duell-feld .duell-label { fill: rgba(255, 255, 255, 0.85); font-weight: 700; }
+.duell-feld .duell-wartet { fill: rgba(255, 255, 255, 0.5); font-style: italic; }
+
 /* ----- News ----- */
 
 .news-karte { padding: 14px 16px; }

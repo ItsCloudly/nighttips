@@ -289,6 +289,54 @@ def aufstellungen_sync(
     return bericht
 
 
+def spiel_aufstellungen(
+    conn: sqlite3.Connection,
+    spiel_id: int,
+    heim_team_id: int | None,
+    gast_team_id: int | None,
+) -> dict[str, Any] | None:
+    """Offizielle Startelfen beider Teams fürs Duell-Feld der Spiel-Lupe.
+
+    Je Seite nur, wenn die komplette Elf vorliegt; None, wenn noch gar
+    nichts da ist (die Lupe lässt die Sektion dann einfach weg).
+    """
+
+    def seite(team_id: int | None) -> dict[str, Any] | None:
+        if team_id is None:
+            return None
+        zeilen = conn.execute(
+            """
+            SELECT sp.id, sp.name, sp.trikotnummer, sp.position, a.formation
+            FROM aufstellung a JOIN spieler sp ON sp.id = a.spieler_id
+            WHERE a.spiel_id = ? AND a.team_id = ? AND a.rolle = 'startelf'
+            ORDER BY CASE sp.position WHEN 'Torwart' THEN 0 WHEN 'Abwehr' THEN 1
+                                      WHEN 'Mittelfeld' THEN 2 WHEN 'Sturm' THEN 3 ELSE 4 END,
+                     sp.trikotnummer, sp.name COLLATE NOCASE
+            """,
+            (spiel_id, team_id),
+        ).fetchall()
+        if len(zeilen) < 11:
+            return None
+        return {
+            "formation": zeilen[0]["formation"],
+            "startelf": [
+                {
+                    "id": zeile["id"],
+                    "name": zeile["name"],
+                    "trikotnummer": zeile["trikotnummer"],
+                    "position": zeile["position"],
+                }
+                for zeile in zeilen
+            ],
+        }
+
+    heim = seite(heim_team_id)
+    gast = seite(gast_team_id)
+    if heim is None and gast is None:
+        return None
+    return {"heim": heim, "gast": gast}
+
+
 def uebliche_startelf(conn: sqlite3.Connection, team_id: int) -> dict[str, Any] | None:
     """Die „übliche Startelf": die 11 häufigsten Starter der bisherigen Spiele.
 

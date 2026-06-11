@@ -149,6 +149,11 @@ def spiel_detail(
         (spiel_id,),
     ).fetchone()
     spiel["quote"] = dict(quote) if quote else None
+    # Offizielle Startelfen fürs Duell-Feld (v0.1.1), sobald der
+    # Aufstellungs-Sync sie geliefert hat
+    spiel["aufstellungen"] = aufstellungen.spiel_aufstellungen(
+        conn, spiel_id, zeile["heim_id"], zeile["gast_id"]
+    )
     spiel["trainer"] = {
         "heim": _trainer_name(conn, zeile["heim_id"]),
         "gast": _trainer_name(conn, zeile["gast_id"]),

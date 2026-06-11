@@ -1473,8 +1473,88 @@ function panelTickerHtml(detail) {
   return teile.join("");
 }
 
+/* Duell-Feld (v0.1.1): beide offiziellen Startelfen auf EINEM Feld —
+   Heim unten, Gast oben (gespiegelt), Punkte in den Teamfarben. */
+
+function _duellKontrast(farbe) {
+  // einfache Luminanz: helle Trikotfarben (England, Deutschland …) → dunkle Schrift
+  const r = parseInt(farbe.slice(1, 3), 16);
+  const g = parseInt(farbe.slice(3, 5), 16);
+  const b = parseInt(farbe.slice(5, 7), 16);
+  return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? "#10141a" : "#ffffff";
+}
+
+function _duellHaelfte(teile, startelf, farbe, unten) {
+  const reihen = ["Torwart", "Abwehr", "Mittelfeld", "Sturm"];
+  const gruppen = new Map(reihen.map((position) => [position, []]));
+  for (const person of startelf) {
+    (gruppen.get(person.position) ?? gruppen.get("Mittelfeld")).push(person);
+  }
+  const schrift = _duellKontrast(farbe);
+  reihen.forEach((position, stufe) => {
+    const spieler = gruppen.get(position);
+    if (!spieler.length) return;
+    const proReihe = 5;
+    spieler.forEach((person, index) => {
+      const reihe = Math.floor(index / proReihe);
+      const inReihe = Math.min(spieler.length - reihe * proReihe, proReihe);
+      const spalte = index % proReihe;
+      const x = 210 + (spalte - (inReihe - 1) / 2) * (inReihe > 4 ? 76 : 88);
+      const abstand = stufe * 76 + reihe * 40;
+      const y = unten ? 586 - abstand : 54 + abstand;
+      const kurzname = escapeHtml(person.name.split(" ").pop());
+      teile.push(`<g class="feld-spieler" data-spieler-lupe="${person.id}" role="button">
+        <circle cx="${x}" cy="${y}" r="14" style="fill:${farbe}"/>
+        <text x="${x}" y="${y + 4.5}" text-anchor="middle" font-size="11.5"
+          style="fill:${schrift}">${person.trikotnummer ?? "·"}</text>
+        <text class="feld-name" x="${x}" y="${y + 28}" text-anchor="middle"
+          font-size="9">${kurzname}</text>
+      </g>`);
+    });
+  });
+}
+
+function duellFeldSvg(detail) {
+  const auf = detail.aufstellungen;
+  if (!auf || (!auf.heim && !auf.gast)) return "";
+  const heimFarbe = TEAM_FARBEN[detail.heim?.fifa_code] ?? "#34e27a";
+  const gastFarbe = TEAM_FARBEN[detail.gast?.fifa_code] ?? "#46c8ff";
+  const label = (seite, farbe, code, formation, oben) => `
+    <circle cx="26" cy="${oben ? 26 : 614}" r="6" style="fill:${farbe}"/>
+    <text x="40" y="${oben ? 30.5 : 618.5}" font-size="12" class="duell-label">
+      ${escapeHtml(code ?? seite)}${formation ? ` · ${escapeHtml(formation)}` : ""}</text>`;
+  const wartetText = (oben) =>
+    `<text x="210" y="${oben ? 170 : 470}" text-anchor="middle" font-size="12"
+       class="duell-wartet">Aufstellung folgt</text>`;
+  const teile = [
+    `<svg viewBox="0 0 420 640" role="img" aria-label="Beide Startaufstellungen auf dem Spielfeld">
+    <defs>
+      <linearGradient id="duellrasen" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#0e3d24"/><stop offset="1" stop-color="#0a2e1b"/>
+      </linearGradient>
+    </defs>
+    <rect width="420" height="640" rx="14" fill="url(#duellrasen)"/>
+    ${[0, 1, 2, 3, 4, 5, 6, 7].map((i) => `<rect x="6" y="${8 + i * 78}" width="408" height="39" fill="rgba(255,255,255,0.025)"/>`).join("")}
+    <rect x="14" y="14" width="392" height="612" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="2" rx="4"/>
+    <line x1="14" y1="320" x2="406" y2="320" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+    <circle cx="210" cy="320" r="50" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="2"/>
+    <rect x="105" y="14" width="210" height="92" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+    <rect x="105" y="534" width="210" height="92" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>`,
+  ];
+  teile.push(label("Gast", gastFarbe, detail.gast?.fifa_code, auf.gast?.formation, true));
+  teile.push(label("Heim", heimFarbe, detail.heim?.fifa_code, auf.heim?.formation, false));
+  if (auf.gast) _duellHaelfte(teile, auf.gast.startelf, gastFarbe, false); // Gast oben
+  else teile.push(wartetText(true));
+  if (auf.heim) _duellHaelfte(teile, auf.heim.startelf, heimFarbe, true); // Heim unten
+  else teile.push(wartetText(false));
+  teile.push("</svg>");
+  return `<section class="lupe-abschnitt"><h3>Aufstellungen
+      <span class="rang-detail">· offiziell</span></h3>
+    <div class="feld-rahmen duell-feld">${teile.join("")}</div></section>`;
+}
+
 function panelTeamsHtml(detail) {
-  const teile = [formDuellHtml(detail)];
+  const teile = [duellFeldSvg(detail), formDuellHtml(detail)];
   if (detail.heim && detail.gast) {
     const tabKnopf = (team, aktiv) => `<button class="team-tab${aktiv ? " aktiv" : ""}"
         data-team-tab="${team.id}" role="tab" aria-selected="${aktiv ? "true" : "false"}">
