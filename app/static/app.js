@@ -1485,6 +1485,7 @@ function _duellKontrast(farbe) {
 }
 
 function _duellHaelfte(teile, startelf, farbe, unten) {
+  if (!Array.isArray(startelf) || !startelf.length) return;
   const reihen = ["Torwart", "Abwehr", "Mittelfeld", "Sturm"];
   const gruppen = new Map(reihen.map((position) => [position, []]));
   for (const person of startelf) {
@@ -1502,7 +1503,7 @@ function _duellHaelfte(teile, startelf, farbe, unten) {
       const x = 210 + (spalte - (inReihe - 1) / 2) * (inReihe > 4 ? 76 : 88);
       const abstand = stufe * 76 + reihe * 40;
       const y = unten ? 586 - abstand : 54 + abstand;
-      const kurzname = escapeHtml(person.name.split(" ").pop());
+      const kurzname = escapeHtml(String(person.name ?? "?").split(" ").pop());
       teile.push(`<g class="feld-spieler" data-spieler-lupe="${person.id}" role="button">
         <circle cx="${x}" cy="${y}" r="14" style="fill:${farbe}"/>
         <text x="${x}" y="${y + 4.5}" text-anchor="middle" font-size="11.5"
@@ -1543,9 +1544,9 @@ function duellFeldSvg(detail) {
   ];
   teile.push(label("Gast", gastFarbe, detail.gast?.fifa_code, auf.gast?.formation, true));
   teile.push(label("Heim", heimFarbe, detail.heim?.fifa_code, auf.heim?.formation, false));
-  if (auf.gast) _duellHaelfte(teile, auf.gast.startelf, gastFarbe, false); // Gast oben
+  if (auf.gast?.startelf?.length) _duellHaelfte(teile, auf.gast.startelf, gastFarbe, false); // Gast oben
   else teile.push(wartetText(true));
-  if (auf.heim) _duellHaelfte(teile, auf.heim.startelf, heimFarbe, true); // Heim unten
+  if (auf.heim?.startelf?.length) _duellHaelfte(teile, auf.heim.startelf, heimFarbe, true); // Heim unten
   else teile.push(wartetText(false));
   teile.push("</svg>");
   return `<section class="lupe-abschnitt"><h3>Aufstellungen
