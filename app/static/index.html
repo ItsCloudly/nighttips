@@ -9,9 +9,9 @@
 <link rel="icon" href="/icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <link rel="preload" href="/fonts/space-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/styles.css?v=23">
+<link rel="stylesheet" href="/styles.css?v=24">
 <!-- FOUC-Schutz: Modus vor dem ersten Rendern setzen; extern statt inline (CSP) -->
-<script src="/boot.js?v=23"></script>
+<script src="/boot.js?v=24"></script>
 </head>
 <body>
 <div class="app-shell">
@@ -206,8 +206,27 @@
         <div class="karte">
           <h2>Konto</h2>
           <p id="kontoInfo"></p>
+          <div class="einstellung-liste">
+            <label class="toggle-zeile master" id="pushZeile" hidden>
+              <span><strong>Benachrichtigungen</strong><br>
+                <span class="hinweis-zeile">Tore, Anpfiff &amp; Endstand aufs Handy</span></span>
+              <span class="schalter"><input id="pushSchalter" type="checkbox"><span class="schalter-knauf"></span></span>
+            </label>
+            <div class="toggle-zeile" id="erinnerungZeile" hidden>
+              <span><strong>Tipp-Erinnerung</strong><br>
+                <span class="hinweis-zeile">Push, wenn du kurz vor Anpfiff noch nicht getippt hast</span></span>
+              <select id="erinnerungVorlauf" aria-label="Vorlaufzeit der Tipp-Erinnerung">
+                <option value="0">Aus</option>
+                <option value="30">30 Min. vorher</option>
+                <option value="45">45 Min. vorher</option>
+                <option value="60">1 Std. vorher</option>
+                <option value="120">2 Std. vorher</option>
+                <option value="360">6 Std. vorher</option>
+                <option value="720">12 Std. vorher</option>
+              </select>
+            </div>
+          </div>
           <div class="knopfzeile">
-            <button id="pushKnopf" hidden></button>
             <button id="logoutKnopf" class="gefahr">Abmelden</button>
           </div>
           <p id="pushHinweis" class="hinweis" hidden></p>
@@ -370,6 +389,6 @@
 
   <div id="toast" class="toast" hidden></div>
 </div>
-<script src="/app.js?v=23"></script>
+<script src="/app.js?v=24"></script>
 </body>
 </html>

@@ -1567,6 +1567,13 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 
 .notiz-marker { color: var(--akzent); font-style: normal; }
 
+/* ----- Konto-Einstellungen im Mehr-Tab (v0.1.1) -----
+   Zeilen-Optik wie die Onboarding-Toggle-Liste (.toggle-zeile/.schalter). */
+
+.einstellung-liste { margin: 4px 0 14px; }
+.einstellung-liste select { min-height: 38px; padding: 6px 10px; flex-shrink: 0; }
+.einstellung-liste .toggle-zeile > span:first-child { min-width: 0; }
+
 /* ----- Feedback (Mehr-Tab + Posteingang der Verwaltung, v0.1.1) ----- */
 
 .feedback-formular {

@@ -45,6 +45,8 @@ def _migrationen(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE nutzer ADD COLUMN ki_freigeschaltet INTEGER NOT NULL DEFAULT 0")
     if "rangliste_sichtbar" not in nutzer_spalten:
         conn.execute("ALTER TABLE nutzer ADD COLUMN rangliste_sichtbar INTEGER NOT NULL DEFAULT 1")
+    if "tipp_erinnerung_minuten" not in nutzer_spalten:
+        conn.execute("ALTER TABLE nutzer ADD COLUMN tipp_erinnerung_minuten INTEGER")
 
 
 @contextmanager

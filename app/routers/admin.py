@@ -714,6 +714,17 @@ def feedback_umschalten(
             raise HTTPException(status_code=404, detail="Meldung nicht gefunden")
         neuer_status = "erledigt" if zeile["status"] == "offen" else "offen"
         conn.execute("UPDATE feedback SET status = ? WHERE id = ?", (neuer_status, feedback_id))
+        db.change_log_eintrag(
+            conn,
+            entitaet="feedback",
+            entitaet_id=feedback_id,
+            feld="status",
+            alt_wert=zeile["status"],
+            neu_wert=neuer_status,
+            quelle="admin",
+            akteur=admin["anzeigename"],
+            zeitpunkt_utc=jetzt_iso(),
+        )
     return {"id": feedback_id, "status": neuer_status}
 
 
@@ -724,6 +735,20 @@ def feedback_loeschen(
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
 ) -> None:
     with db.schreib_transaktion(conn):
-        if conn.execute("SELECT 1 FROM feedback WHERE id = ?", (feedback_id,)).fetchone() is None:
+        zeile = conn.execute(
+            "SELECT kategorie, nachricht FROM feedback WHERE id = ?", (feedback_id,)
+        ).fetchone()
+        if zeile is None:
             raise HTTPException(status_code=404, detail="Meldung nicht gefunden")
         conn.execute("DELETE FROM feedback WHERE id = ?", (feedback_id,))
+        db.change_log_eintrag(
+            conn,
+            entitaet="feedback",
+            entitaet_id=feedback_id,
+            feld="geloescht",
+            alt_wert=f"{zeile['kategorie']}: {zeile['nachricht'][:80]}",
+            neu_wert=None,
+            quelle="admin",
+            akteur=admin["anzeigename"],
+            zeitpunkt_utc=jetzt_iso(),
+        )

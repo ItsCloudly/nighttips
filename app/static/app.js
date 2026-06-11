@@ -781,6 +781,7 @@ function lupeSchliessen() {
   if (lupe.hidden || lupe.classList.contains("schliesst")) return;
   zustand.lupeSpielId = null;
   clearInterval(lupeCountdownTimer);
+  notizSofortSpeichern(); // ungespeicherte Notiz nicht verlieren
   // Erst die Schließ-Animation (Blatt gleitet nach unten), dann verstecken
   lupe.classList.add("schliesst");
   setTimeout(() => {
@@ -1278,35 +1279,51 @@ function notizSektionHtml(detail) {
 }
 
 let notizTimer = null;
+let notizAusstehend = null; // wartendes Speichern, das beim Lupe-Wechsel sofort laufen muss
+
+/* Wartet eine Notiz noch auf den Debounce, sofort speichern (Lupe-Schließen,
+   Spiel-Wechsel über den Mini-Scroller) — Getipptes geht nie verloren. */
+function notizSofortSpeichern() {
+  clearTimeout(notizTimer);
+  if (notizAusstehend) {
+    const speichern = notizAusstehend;
+    notizAusstehend = null;
+    speichern();
+  }
+}
 
 function notizEreignisse(bereich, spielId) {
+  notizSofortSpeichern();
   const feld = bereich.querySelector(".notiz-text");
   const status = bereich.querySelector("[data-notiz-status]");
+  const speichern = async () => {
+    notizAusstehend = null;
+    const text = feld.value.trim();
+    try {
+      if (!text) {
+        await api(`/api/notizen/${spielId}`, { method: "DELETE" });
+        status.textContent = "Notiz gelöscht";
+      } else {
+        const antwort = await api(`/api/notizen/${spielId}`, {
+          method: "PUT",
+          body: JSON.stringify({ text }),
+        });
+        status.textContent = `Gespeichert ✓ · ${lokaleUhrzeit(antwort.geaendert_utc)} Uhr`;
+      }
+      const spiel = zustand.spiele.find((eintrag) => eintrag.id === spielId);
+      if (spiel && spiel.hat_notiz !== !!text) {
+        spiel.hat_notiz = !!text;
+        spieleRendern(); // ✎-Marker in der Liste sofort nachführen
+      }
+    } catch {
+      status.textContent = "Speichern fehlgeschlagen — Verbindung prüfen";
+    }
+  };
   feld.addEventListener("input", () => {
     status.textContent = "Speichert …";
     clearTimeout(notizTimer);
-    notizTimer = setTimeout(async () => {
-      const text = feld.value.trim();
-      try {
-        if (!text) {
-          await api(`/api/notizen/${spielId}`, { method: "DELETE" });
-          status.textContent = "Notiz gelöscht";
-        } else {
-          const antwort = await api(`/api/notizen/${spielId}`, {
-            method: "PUT",
-            body: JSON.stringify({ text }),
-          });
-          status.textContent = `Gespeichert ✓ · ${lokaleUhrzeit(antwort.geaendert_utc)} Uhr`;
-        }
-        const spiel = zustand.spiele.find((eintrag) => eintrag.id === spielId);
-        if (spiel && spiel.hat_notiz !== !!text) {
-          spiel.hat_notiz = !!text;
-          spieleRendern(); // ✎-Marker in der Liste sofort nachführen
-        }
-      } catch {
-        status.textContent = "Speichern fehlgeschlagen — Verbindung prüfen";
-      }
-    }, 800);
+    notizAusstehend = speichern;
+    notizTimer = setTimeout(notizSofortSpeichern, 800);
   });
 }
 
@@ -2375,16 +2392,20 @@ function base64ZuUint8(base64) {
 }
 
 async function pushStatusLaden() {
-  const knopf = el("pushKnopf");
+  const zeile = el("pushZeile");
+  const schalter = el("pushSchalter");
+  const erinnerung = el("erinnerungZeile");
   const hinweis = el("pushHinweis");
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-    knopf.hidden = true;
+    zeile.hidden = true;
+    erinnerung.hidden = true;
     return;
   }
   try {
     const info = await api("/api/push/vapid-key");
     if (!info.aktiv) {
-      knopf.hidden = true;
+      zeile.hidden = true;
+      erinnerung.hidden = true;
       hinweis.textContent = "Push ist auf dem Server nicht konfiguriert (VAPID-Schlüssel fehlen).";
       hinweis.hidden = zustand.nutzer?.rolle !== "admin";
       return;
@@ -2392,18 +2413,23 @@ async function pushStatusLaden() {
     const registrierung = await navigator.serviceWorker.ready;
     const abo = await registrierung.pushManager.getSubscription();
     zustand.pushAktiv = Boolean(abo);
-    knopf.hidden = false;
-    knopf.textContent = zustand.pushAktiv
-      ? "🔔 Benachrichtigungen: an"
-      : "🔕 Benachrichtigungen aktivieren";
-    knopf.dataset.publicKey = info.public_key;
+    zeile.hidden = false;
+    schalter.checked = zustand.pushAktiv;
+    schalter.dataset.publicKey = info.public_key;
+    // Vorlaufzeit der Tipp-Erinnerung nur zeigen, wenn Push überhaupt ankommt
+    erinnerung.hidden = !zustand.pushAktiv;
+    if (zustand.pushAktiv) {
+      const ich = await api("/api/me");
+      el("erinnerungVorlauf").value = String(ich.tipp_erinnerung_minuten ?? 120);
+    }
   } catch {
-    knopf.hidden = true;
+    zeile.hidden = true;
+    erinnerung.hidden = true;
   }
 }
 
 async function pushUmschalten() {
-  const knopf = el("pushKnopf");
+  const schalter = el("pushSchalter");
   try {
     const registrierung = await navigator.serviceWorker.ready;
     const bestehend = await registrierung.pushManager.getSubscription();
@@ -2423,15 +2449,17 @@ async function pushUmschalten() {
       }
       const abo = await registrierung.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: base64ZuUint8(knopf.dataset.publicKey),
+        applicationServerKey: base64ZuUint8(schalter.dataset.publicKey),
       });
       await api("/api/push/subscribe", { method: "POST", body: JSON.stringify(abo.toJSON()) });
       zustand.pushAktiv = true;
       toast("Benachrichtigungen aktiv 🔔 — Tore, Anpfiffe, Tipp-Erinnerungen");
     }
-    await pushStatusLaden();
   } catch (fehler) {
     fehlerAnzeigen(fehler);
+  } finally {
+    // Schalter und Erinnerungs-Zeile immer auf den echten Stand bringen
+    await pushStatusLaden().catch(() => {});
   }
 }
 
@@ -2853,7 +2881,20 @@ function mehrEreignisse() {
     }
     zeigeLogin();
   });
-  el("pushKnopf").addEventListener("click", pushUmschalten);
+  el("pushSchalter").addEventListener("change", pushUmschalten);
+  el("erinnerungVorlauf").addEventListener("change", async (ereignis) => {
+    try {
+      const minuten = Number(ereignis.target.value);
+      await api("/api/me/einstellungen", {
+        method: "PATCH",
+        body: JSON.stringify({ tipp_erinnerung_minuten: minuten }),
+      });
+      if (zustand.nutzer) zustand.nutzer.tipp_erinnerung_minuten = minuten;
+      toast(minuten === 0 ? "Tipp-Erinnerung ausgeschaltet" : "Tipp-Erinnerung gespeichert ✓");
+    } catch (fehler) {
+      fehlerAnzeigen(fehler);
+    }
+  });
 
   // Feedback/Fehler melden (v0.1.1): Kategorie-Wahl + Formular
   el("feedbackKategorie").addEventListener("click", (ereignis) => {
@@ -2878,6 +2919,12 @@ function mehrEreignisse() {
         }),
       });
       ereignis.target.reset();
+      // Kategorie-Pills liegen außerhalb des Formulars: zurück auf den Standard
+      for (const knopf of el("feedbackKategorie").querySelectorAll("[data-kategorie]")) {
+        const standard = knopf.dataset.kategorie === "fehler";
+        knopf.classList.toggle("aktiv", standard);
+        knopf.setAttribute("aria-checked", standard ? "true" : "false");
+      }
       toast("Danke! Deine Meldung ist angekommen ✓");
     } catch (fehler) {
       fehlerAnzeigen(fehler);

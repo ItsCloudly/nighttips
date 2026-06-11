@@ -6,7 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 
-from .. import ratelimit
+from .. import db, ratelimit
 from ..abhaengigkeiten import (
     SESSION_COOKIE,
     aktueller_nutzer,
@@ -14,7 +14,7 @@ from ..abhaengigkeiten import (
     get_einstellungen,
 )
 from ..config import Einstellungen
-from ..modelle import LoginDaten, NutzerInfo, RegistrierungsDaten
+from ..modelle import ErinnerungsEinstellung, LoginDaten, NutzerInfo, RegistrierungsDaten
 from ..services import nutzer as nutzer_service
 
 router = APIRouter(prefix="/api", tags=["auth"])
@@ -144,4 +144,20 @@ def me(
         anzeigename=nutzer["anzeigename"],
         rolle=nutzer["rolle"],
         ki_freigeschaltet=bool(nutzer["ki_freigeschaltet"]),
+        tipp_erinnerung_minuten=nutzer["tipp_erinnerung_minuten"],
     )
+
+
+@router.patch("/me/einstellungen")
+def einstellungen_aendern(
+    daten: ErinnerungsEinstellung,
+    nutzer: Annotated[sqlite3.Row, Depends(aktueller_nutzer)],
+    conn: Annotated[sqlite3.Connection, Depends(get_db)],
+) -> dict[str, int]:
+    """Persönliche Vorlaufzeit der Tipp-Erinnerung setzen (0 = aus)."""
+    with db.schreib_transaktion(conn):
+        conn.execute(
+            "UPDATE nutzer SET tipp_erinnerung_minuten = ? WHERE id = ?",
+            (daten.tipp_erinnerung_minuten, nutzer["id"]),
+        )
+    return {"tipp_erinnerung_minuten": daten.tipp_erinnerung_minuten}

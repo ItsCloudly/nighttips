@@ -14,12 +14,18 @@ from ..zeit import jetzt_iso
 router = APIRouter(prefix="/api", tags=["notizen"])
 
 
+def _spiel_pruefen(conn: sqlite3.Connection, spiel_id: int) -> None:
+    if not conn.execute("SELECT 1 FROM spiel WHERE id = ?", (spiel_id,)).fetchone():
+        raise HTTPException(status_code=404, detail="Spiel nicht gefunden")
+
+
 @router.get("/notizen/{spiel_id}")
 def notiz_lesen(
     spiel_id: int,
     nutzer: Annotated[sqlite3.Row, Depends(aktueller_nutzer)],
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
 ) -> dict[str, Any]:
+    _spiel_pruefen(conn, spiel_id)
     zeile = conn.execute(
         "SELECT text, erstellt_utc, geaendert_utc FROM notiz"
         " WHERE nutzer_id = ? AND spiel_id = ?",
@@ -35,8 +41,7 @@ def notiz_speichern(
     nutzer: Annotated[sqlite3.Row, Depends(aktueller_nutzer)],
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
 ) -> dict[str, Any]:
-    if not conn.execute("SELECT 1 FROM spiel WHERE id = ?", (spiel_id,)).fetchone():
-        raise HTTPException(status_code=404, detail="Spiel nicht gefunden")
+    _spiel_pruefen(conn, spiel_id)
     jetzt = jetzt_iso()
     with db.schreib_transaktion(conn):
         conn.execute(
@@ -55,6 +60,7 @@ def notiz_loeschen(
     nutzer: Annotated[sqlite3.Row, Depends(aktueller_nutzer)],
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
 ) -> None:
+    _spiel_pruefen(conn, spiel_id)
     with db.schreib_transaktion(conn):
         conn.execute(
             "DELETE FROM notiz WHERE nutzer_id = ? AND spiel_id = ?",

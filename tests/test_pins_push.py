@@ -139,6 +139,45 @@ def test_tipp_erinnerung_fuer_alle_ohne_tipp(conn, push_einstellungen, gesendete
     assert push.erinnerungen_pruefen(conn, push_einstellungen) == 0
 
 
+def test_tipp_erinnerung_persoenliche_vorlaufzeit(conn, push_einstellungen, gesendete):
+    """v0.1.1: Jeder Nutzer hat sein eigenes Erinnerungs-Fenster (NULL = Standard 120,
+    0 = abbestellt). Anstoß in 3 h: nur das 12-h-Fenster ist schon fällig."""
+    match = _api_match()
+    match["utcDate"] = iso_utc(jetzt_utc() + timedelta(minutes=180))
+    sync.stammdaten_sync(conn, push_einstellungen, api=ApiAttrappe(API_TEAMS, [match]))
+
+    frueh = _nutzer_mit_abo(conn, "Frueh", "https://push.example/frueh")  # 720 → fällig
+    knapp = _nutzer_mit_abo(conn, "Knapp", "https://push.example/knapp")  # 30 → noch nicht
+    nie = _nutzer_mit_abo(conn, "Nie", "https://push.example/nie")  # 0 → aus
+    _nutzer_mit_abo(conn, "Standard", "https://push.example/standard")  # NULL → 120 → noch nicht
+    with db_modul.schreib_transaktion(conn):
+        conn.execute("UPDATE nutzer SET tipp_erinnerung_minuten = 720 WHERE id = ?", (frueh,))
+        conn.execute("UPDATE nutzer SET tipp_erinnerung_minuten = 30 WHERE id = ?", (knapp,))
+        conn.execute("UPDATE nutzer SET tipp_erinnerung_minuten = 0 WHERE id = ?", (nie,))
+
+    assert push.erinnerungen_pruefen(conn, push_einstellungen) == 1
+    assert gesendete[0][0] == "https://push.example/frueh"
+    # Dedup über push_versand: zweiter Lauf schickt nichts Neues
+    assert push.erinnerungen_pruefen(conn, push_einstellungen) == 0
+
+
+def test_erinnerungs_einstellung_endpunkt(client, conn, einstellungen):
+    """PATCH /api/me/einstellungen setzt die persönliche Vorlaufzeit."""
+    nutzer_service.nutzer_anlegen(conn, anzeigename="Mia", pin="1234", akteur="test")
+    client.post("/api/login", json={"anzeigename": "Mia", "pin": "1234"})
+    assert client.get("/api/me").json()["tipp_erinnerung_minuten"] is None
+
+    antwort = client.patch("/api/me/einstellungen", json={"tipp_erinnerung_minuten": 45})
+    assert antwort.status_code == 200
+    assert client.get("/api/me").json()["tipp_erinnerung_minuten"] == 45
+    # Grenzen: 0 (aus) ist erlaubt, mehr als 12 h nicht
+    assert client.patch("/api/me/einstellungen", json={"tipp_erinnerung_minuten": 0}).status_code == 200
+    assert (
+        client.patch("/api/me/einstellungen", json={"tipp_erinnerung_minuten": 9999}).status_code
+        == 422
+    )
+
+
 def test_anpfiff_erinnerung_fuer_pins(conn, push_einstellungen, gesendete):
     match = _api_match()
     match["utcDate"] = iso_utc(jetzt_utc() + timedelta(minutes=20))

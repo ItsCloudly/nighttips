@@ -27,6 +27,12 @@ class NutzerInfo(BaseModel):
     anzeigename: str
     rolle: str
     ki_freigeschaltet: bool = False
+    # Persönliche Vorlaufzeit der Tipp-Erinnerung (None = Server-Standard, 0 = aus)
+    tipp_erinnerung_minuten: int | None = None
+
+
+class ErinnerungsEinstellung(BaseModel):
+    tipp_erinnerung_minuten: int = Field(ge=0, le=720)
 
 
 class NeuerNutzer(BaseModel):

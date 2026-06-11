@@ -155,7 +155,10 @@ CREATE TABLE IF NOT EXISTS nutzer (
     -- Taucht das Konto in Wertungs-Ansichten auf (Rangliste, Podium, Top-Tipper)?
     -- 0 z. B. für Test-/Dev-Konten; Tipplisten zeigen sie weiterhin. Nur der
     -- Admin schaltet um. (Bestands-DBs: Migration in db.py)
-    rangliste_sichtbar INTEGER NOT NULL DEFAULT 1
+    rangliste_sichtbar INTEGER NOT NULL DEFAULT 1,
+    -- Persönliche Vorlaufzeit der Tipp-Erinnerung in Minuten:
+    -- NULL = Server-Standard (WM26_TIPP_ERINNERUNG_MINUTEN), 0 = keine Erinnerung.
+    tipp_erinnerung_minuten INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS tipp (

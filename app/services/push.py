@@ -184,18 +184,27 @@ def ereignis_pushen(
     return gesendet
 
 
+# Größte wählbare Vorlaufzeit der Tipp-Erinnerung (12 h) — bestimmt zugleich,
+# wie weit erinnerungen_pruefen() nach vorn schaut.
+MAX_TIPP_VORLAUF_MINUTEN = 720
+
+
 def erinnerungen_pruefen(conn: sqlite3.Connection, einstellungen: Einstellungen) -> int:
-    """Anpfiff-Erinnerung (gepinnt) und Tipp-Erinnerung (alle) für bald startende Spiele."""
+    """Anpfiff-Erinnerung (gepinnt) und Tipp-Erinnerung für bald startende Spiele.
+
+    Die Tipp-Erinnerung respektiert die persönliche Vorlaufzeit je Nutzer
+    (nutzer.tipp_erinnerung_minuten): NULL = Server-Standard, 0 = abbestellt.
+    Der Dedup über push_versand sorgt dafür, dass es bei einem Spiel trotzdem
+    bei genau einer Erinnerung pro Nutzer bleibt.
+    """
     if not aktiv(einstellungen):
         return 0
     jetzt = jetzt_utc()
     gesendet = 0
+    max_vorlauf = max(einstellungen.tipp_erinnerung_minuten, MAX_TIPP_VORLAUF_MINUTEN)
     bald = conn.execute(
         "SELECT id FROM spiel WHERE status = 'geplant' AND anstoss_utc BETWEEN ? AND ?",
-        (
-            iso_utc(jetzt),
-            iso_utc(jetzt + timedelta(minutes=einstellungen.tipp_erinnerung_minuten)),
-        ),
+        (iso_utc(jetzt), iso_utc(jetzt + timedelta(minutes=max_vorlauf))),
     ).fetchall()
     for zeile in bald:
         spiel = _spiel_info(conn, zeile["id"])
@@ -212,16 +221,27 @@ def erinnerungen_pruefen(conn: sqlite3.Connection, einstellungen: Einstellungen)
                     ref_id=spiel["id"], titel="Gleich Anpfiff",
                     text=paarung, url=f"/#spiel-{spiel['id']}",
                 )
-        # Tipp-Erinnerung an alle, die noch nicht getippt haben (Nicht-KI)
+        # Tipp-Erinnerung an alle ohne Tipp (Nicht-KI), deren persönliches
+        # Fenster den Anstoß schon erreicht hat
         ohne_tipp = conn.execute(
-            "SELECT n.id FROM nutzer n WHERE n.rolle != 'ki' AND NOT EXISTS"
+            "SELECT n.id, n.tipp_erinnerung_minuten FROM nutzer n"
+            " WHERE n.rolle != 'ki' AND NOT EXISTS"
             " (SELECT 1 FROM tipp t WHERE t.nutzer_id = n.id AND t.spiel_id = ?)",
             (spiel["id"],),
         ).fetchall()
-        if ohne_tipp:
+        faellig = []
+        for person in ohne_tipp:
+            vorlauf = person["tipp_erinnerung_minuten"]
+            if vorlauf is None:
+                vorlauf = einstellungen.tipp_erinnerung_minuten
+            if vorlauf <= 0:
+                continue
+            if anstoss <= iso_utc(jetzt + timedelta(minutes=vorlauf)):
+                faellig.append(person["id"])
+        if faellig:
             gesendet += senden(
                 conn, einstellungen,
-                nutzer_ids=[zeile["id"] for zeile in ohne_tipp],
+                nutzer_ids=faellig,
                 anlass=ANLASS_TIPP_ERINNERUNG, ref_id=spiel["id"],
                 titel="Noch nicht getippt!",
                 text=f"{paarung} startet bald — jetzt noch tippen.",
