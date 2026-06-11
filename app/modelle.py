@@ -28,7 +28,7 @@ class NutzerInfo(BaseModel):
     rolle: str
     ki_freigeschaltet: bool = False
     # Persönliche Vorlaufzeit der Tipp-Erinnerung (None = Server-Standard, 0 = aus)
-    tipp_erinnerung_minuten: int | None = None
+    tipp_erinnerung_minuten: int | None = Field(default=None, ge=0, le=720)
 
 
 class ErinnerungsEinstellung(BaseModel):

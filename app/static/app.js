@@ -12,6 +12,7 @@ const zustand = {
   zeitraum: "gesamt",
   runde: "",
   spieleTag: "alle",
+  kalenderMonat: null,
   filterStatus: "alle",
   filterGruppe: "",
   filterTeam: "",
@@ -317,7 +318,7 @@ function gefilterteSpiele() {
   });
 }
 
-/* Datums-Chips: Heute/Morgen/Gestern + alle Turniertage */
+/* Sprechende Tageslabels: Heute/Morgen/Gestern, sonst "Mi, 18.06." */
 function tagLabel(datum) {
   const heute = new Date();
   const tagDiff = Math.round(
@@ -333,17 +334,90 @@ function tagLabel(datum) {
   });
 }
 
-function datumsChipsRendern() {
-  const tage = [...new Set(zustand.spiele.map((spiel) => lokalesDatum(spiel.anstoss_utc)))].sort();
-  const leiste = el("spieleTage");
-  leiste.innerHTML = ["alle", ...tage]
-    .map(
-      (tag) => `<button class="tag-chip${tag === zustand.spieleTag ? " aktiv" : ""}" data-tag-datum="${tag}">
-        ${tag === "alle" ? "Alle Tage" : tagLabel(tag)}</button>`
-    )
-    .join("");
-  // Aktiven Chip in den sichtbaren Bereich rücken
-  leiste.querySelector(".aktiv")?.scrollIntoView({ inline: "center", block: "nearest" });
+/* ----- Spieltag-Kalender (v0.1.1) -----
+   Monatsraster statt Chip-Leiste: Tage mit Spielen sind wählbar (Punkte
+   deuten die Spielanzahl an), ein erneuter Tap auf den gewählten Tag springt
+   zurück auf "Alle Tage". */
+
+const KALENDER_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="16" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4 10.5h16M9 4v4M15 4v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+
+function spieleProTag() {
+  const tage = new Map();
+  for (const spiel of zustand.spiele) {
+    const datum = lokalesDatum(spiel.anstoss_utc);
+    tage.set(datum, (tage.get(datum) ?? 0) + 1);
+  }
+  return tage;
+}
+
+function kalenderMonatKlemmen(monat, tage) {
+  const monate = [...new Set([...tage.keys()].map((datum) => datum.slice(0, 7)))].sort();
+  if (!monate.length) return monat;
+  if (monat < monate[0]) return monate[0];
+  if (monat > monate[monate.length - 1]) return monate[monate.length - 1];
+  return monat;
+}
+
+function kalenderRendern() {
+  const tage = spieleProTag();
+  const heuteDatum = new Date().toLocaleDateString("en-CA");
+  zustand.kalenderMonat = kalenderMonatKlemmen(
+    zustand.kalenderMonat ?? heuteDatum.slice(0, 7),
+    tage
+  );
+  const monat = zustand.kalenderMonat;
+  const gewaehlt = zustand.spieleTag;
+
+  const anzahlText = (anzahl) => `${anzahl} ${anzahl === 1 ? "Spiel" : "Spiele"}`;
+  const zusammenfassung =
+    gewaehlt === "alle"
+      ? `Alle Tage · ${anzahlText(zustand.spiele.length)}`
+      : `${tagLabel(gewaehlt)} · ${anzahlText(tage.get(gewaehlt) ?? 0)}`;
+  el("kalenderZusammenfassung").innerHTML =
+    `<span class="kalender-icon" aria-hidden="true">${KALENDER_SVG}</span>` +
+    `<span>${escapeHtml(zusammenfassung)}</span>`;
+
+  const monate = [...new Set([...tage.keys()].map((datum) => datum.slice(0, 7)))].sort();
+  el("kalenderMonat").textContent = new Date(`${monat}-01T12:00:00`).toLocaleDateString("de-DE", {
+    month: "long",
+    year: "numeric",
+  });
+  el("kalenderZurueck").disabled = !monate.length || monat <= monate[0];
+  el("kalenderVor").disabled = !monate.length || monat >= monate[monate.length - 1];
+
+  const erster = new Date(`${monat}-01T12:00:00`);
+  const versatz = (erster.getDay() + 6) % 7; // Wochenstart Montag
+  const tageImMonat = new Date(erster.getFullYear(), erster.getMonth() + 1, 0).getDate();
+  const zellen = [];
+  for (let leer = 0; leer < versatz; leer++) {
+    zellen.push('<span class="kalender-tag leer" aria-hidden="true"></span>');
+  }
+  for (let tag = 1; tag <= tageImMonat; tag++) {
+    const datum = `${monat}-${String(tag).padStart(2, "0")}`;
+    const anzahl = tage.get(datum) ?? 0;
+    const klassen = ["kalender-tag"];
+    if (datum === heuteDatum) klassen.push("heute");
+    if (datum === gewaehlt) klassen.push("gewaehlt");
+    if (anzahl) {
+      const punkte = "<i></i>".repeat(Math.min(anzahl, 3));
+      zellen.push(`<button type="button" class="${klassen.join(" ")}" data-kalender-tag="${datum}"
+        aria-pressed="${datum === gewaehlt}"
+        aria-label="${tagLabel(datum)}, ${anzahlText(anzahl)}">
+        ${tag}<span class="kalender-punkte" aria-hidden="true">${punkte}</span></button>`);
+    } else {
+      zellen.push(`<span class="${klassen.join(" ")} ohne">${tag}</span>`);
+    }
+  }
+  el("kalenderTage").innerHTML = zellen.join("");
+  el("kalenderAlle").hidden = gewaehlt === "alle";
+}
+
+function kalenderMonatWechseln(richtung) {
+  const basis = new Date(`${zustand.kalenderMonat}-01T12:00:00`);
+  basis.setMonth(basis.getMonth() + richtung);
+  zustand.kalenderMonat = basis.toLocaleDateString("en-CA").slice(0, 7);
+  kalenderRendern();
 }
 
 function duellTeamHtml(team) {
@@ -573,7 +647,7 @@ async function newsTeaserLaden() {
 
 function spieleRendern(flashId = null) {
   const liste = el("spieleListe");
-  datumsChipsRendern();
+  kalenderRendern();
   const spiele = gefilterteSpiele();
   const standardFilter =
     zustand.filterStatus === "alle" && !zustand.filterGruppe && !zustand.filterTeam;
@@ -694,10 +768,20 @@ function spieleEreignisse() {
       spieleRendern();
     });
   }
-  el("spieleTage").addEventListener("click", (ereignis) => {
-    const chip = ereignis.target.closest("[data-tag-datum]");
-    if (!chip) return;
-    zustand.spieleTag = chip.dataset.tagDatum;
+  el("kalenderTage").addEventListener("click", (ereignis) => {
+    const knopf = ereignis.target.closest("[data-kalender-tag]");
+    if (!knopf) return;
+    const datum = knopf.dataset.kalenderTag;
+    // Toggle-Logik: gewählten Tag erneut antippen = zurück zu "Alle Tage"
+    zustand.spieleTag = zustand.spieleTag === datum ? "alle" : datum;
+    el("spieleKalender").open = false;
+    spieleRendern();
+  });
+  el("kalenderZurueck").addEventListener("click", () => kalenderMonatWechseln(-1));
+  el("kalenderVor").addEventListener("click", () => kalenderMonatWechseln(1));
+  el("kalenderAlle").addEventListener("click", () => {
+    zustand.spieleTag = "alle";
+    el("spieleKalender").open = false;
     spieleRendern();
   });
   el("filterGruppe").addEventListener("change", (ereignis) => {

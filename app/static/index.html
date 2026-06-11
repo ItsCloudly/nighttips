@@ -9,9 +9,9 @@
 <link rel="icon" href="/icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <link rel="preload" href="/fonts/space-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/styles.css?v=24">
+<link rel="stylesheet" href="/styles.css?v=25">
 <!-- FOUC-Schutz: Modus vor dem ersten Rendern setzen; extern statt inline (CSP) -->
-<script src="/boot.js?v=24"></script>
+<script src="/boot.js?v=25"></script>
 </head>
 <body>
 <div class="app-shell">
@@ -116,7 +116,25 @@
         <div class="kopfzeile">
           <h1>Spiele</h1>
         </div>
-        <div id="spieleTage" class="tag-leiste datums-chips" role="group" aria-label="Spieltag wählen"></div>
+        <details id="spieleKalender" class="kalender">
+          <summary id="kalenderZusammenfassung" class="kalender-kopf"></summary>
+          <div class="kalender-blatt">
+            <div class="kalender-nav">
+              <button type="button" id="kalenderZurueck" class="kalender-pfeil"
+                      aria-label="Voriger Monat"></button>
+              <span id="kalenderMonat" class="kalender-monat"></span>
+              <button type="button" id="kalenderVor" class="kalender-pfeil vor"
+                      aria-label="Nächster Monat"></button>
+            </div>
+            <div class="kalender-wochentage" aria-hidden="true">
+              <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span>
+              <span>Fr</span><span>Sa</span><span>So</span>
+            </div>
+            <div id="kalenderTage" class="kalender-tage" aria-label="Spieltag wählen"></div>
+            <button type="button" id="kalenderAlle" class="kalender-alle" hidden>
+              Alle Tage anzeigen</button>
+          </div>
+        </details>
         <div class="filterzeile">
           <div class="segmente klein" id="spieleFilterStatus" role="tablist" aria-label="Nach Status filtern">
             <button data-status="alle" class="aktiv" role="tab" aria-selected="true">Alle</button>
@@ -389,6 +407,6 @@
 
   <div id="toast" class="toast" hidden></div>
 </div>
-<script src="/app.js?v=24"></script>
+<script src="/app.js?v=25"></script>
 </body>
 </html>

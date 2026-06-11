@@ -788,9 +788,149 @@ input.tipp-eingabe:focus {
   overflow: hidden;
 }
 
-/* ----- Datums-Chips + Runden-Gruppen (Spieleliste) ----- */
+/* ----- Spieltag-Kalender + Runden-Gruppen (Spieleliste) ----- */
 
-.datums-chips { margin-top: 10px; }
+.kalender { border: 0; margin-top: 10px; }
+
+.kalender-kopf {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 14px;
+  background: var(--karte);
+  border-radius: 14px;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.kalender-kopf::-webkit-details-marker { display: none; }
+
+.kalender-kopf::after {
+  content: "";
+  width: 0.45em;
+  height: 0.45em;
+  border-right: 2px solid var(--ink-2);
+  border-bottom: 2px solid var(--ink-2);
+  transform: rotate(45deg) translateY(-2px);
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.kalender[open] .kalender-kopf::after { transform: rotate(-135deg) translateY(2px); }
+
+.kalender-icon svg { width: 18px; height: 18px; display: block; color: var(--akzent); }
+
+.kalender-blatt {
+  background: var(--karte);
+  border-radius: 16px;
+  margin-top: 8px;
+  padding: 12px;
+}
+
+.kalender-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.kalender-monat { font-family: var(--ns-display); font-weight: 700; }
+
+.kalender-pfeil {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--karte-hoch);
+  cursor: pointer;
+}
+
+.kalender-pfeil::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  transform: rotate(45deg) translateX(1px);
+}
+
+.kalender-pfeil.vor::before { transform: rotate(-135deg) translateX(1px); }
+.kalender-pfeil:disabled { opacity: 0.35; cursor: default; }
+
+.kalender-wochentage, .kalender-tage {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.kalender-wochentage span {
+  text-align: center;
+  font-family: var(--ns-mono);
+  font-size: 0.66rem;
+  color: var(--ink-2);
+  padding: 4px 0 6px;
+}
+
+.kalender-tag {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 42px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+button.kalender-tag { background: var(--karte-hoch); cursor: pointer; }
+
+.kalender-tag.ohne, .kalender-tag.leer {
+  color: var(--ink-2);
+  opacity: 0.45;
+  font-weight: 400;
+}
+
+.kalender-tag.heute {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--akzent) 65%, transparent);
+}
+
+.kalender-tag.gewaehlt { background: var(--akzent); color: var(--akzent-ink); }
+
+.kalender-punkte { display: flex; gap: 2px; height: 4px; }
+
+.kalender-punkte i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--akzent);
+}
+
+.kalender-tag.gewaehlt .kalender-punkte i { background: var(--akzent-ink); }
+
+.kalender-alle {
+  width: 100%;
+  margin-top: 10px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--karte-hoch);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
 
 .runden-gruppe {
   border: 0;
