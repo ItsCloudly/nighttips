@@ -169,7 +169,7 @@ def test_live_phase_erkennung(conn):
     from datetime import timedelta
 
     from app import db as db_modul
-    from app.scheduler import _live_phase
+    from app.scheduler import _poll_phase
     from app.zeit import iso_utc, jetzt_utc
 
     def spiel_mit(status: str, minuten_bis_anstoss: int) -> None:
@@ -185,14 +185,14 @@ def test_live_phase_erkennung(conn):
             )
 
     spiel_mit("geplant", 30)
-    assert _live_phase(conn) is True  # Vorlauf: Anpfiff in 30 Minuten
+    assert _poll_phase(conn) == "vorlauf"  # Anpfiff in 30 Minuten
     spiel_mit("geplant", 120)
-    assert _live_phase(conn) is False  # noch zu früh
+    assert _poll_phase(conn) == "normal"  # noch zu früh
     spiel_mit("live", -60)
-    assert _live_phase(conn) is True  # Spiel läuft
+    assert _poll_phase(conn) == "live"  # Spiel läuft → engster Takt
     spiel_mit("halbzeit", -50)
-    assert _live_phase(conn) is True
+    assert _poll_phase(conn) == "live"
     spiel_mit("beendet", -120)
-    assert _live_phase(conn) is False
+    assert _poll_phase(conn) == "normal"
     spiel_mit("live", -60 * 5)
-    assert _live_phase(conn) is False  # Sicherheitsnetz: hängender Live-Status
+    assert _poll_phase(conn) == "normal"  # Sicherheitsnetz: hängender Live-Status
