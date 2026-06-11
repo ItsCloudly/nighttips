@@ -3,7 +3,7 @@
 
 // Eine Versionsnummer für Cache UND Assets — bei Frontend-Änderungen hochzählen
 // (muss zu den ?v=-Parametern in index.html passen).
-const VERSION = "35";
+const VERSION = "37";
 const CACHE_NAME = `wm26-v${VERSION}`;
 const SHELL = [
   "/",
@@ -33,6 +33,9 @@ const SHELL = [
   "/illustrationen/ki-chip.webp",
   "/illustrationen/stadium-hero.webp",
   "/illustrationen/news-fallback.webp",
+  // Quellen-Logos der News-Feeds (v0.1.2)
+  "/icons/quellen/sportschau.png",
+  "/icons/quellen/kicker.png",
 ];
 
 self.addEventListener("install", (ereignis) => {

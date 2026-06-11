@@ -43,6 +43,7 @@
   --ns-green-tief: #1fa659;
   --ns-green-ink: #04220f;
   --ns-gold: #f5c84c;
+  --ns-lila: #b07bff;
   --ns-red: #ff453a;
   --ns-cyan: #46c8ff;
   --ns-aurora: linear-gradient(135deg, #34e27a, #46c8ff);
@@ -893,6 +894,7 @@ input.tipp-eingabe:focus {
   border-radius: 16px;
   margin-top: 8px;
   padding: 12px;
+  overflow: hidden;
 }
 
 .kalender-nav {
@@ -927,9 +929,12 @@ input.tipp-eingabe:focus {
 .kalender-pfeil.vor::before { transform: rotate(-135deg) translateX(1px); }
 .kalender-pfeil:disabled { opacity: 0.35; cursor: default; }
 
+/* minmax(0, …) + padding 0: das globale Button-Padding (9px 14px) machte die
+   Tageskacheln breiter als 1/7 der Karte — Spalte 7 ragte rechts hinaus und
+   schob die ganze Seite ins horizontale Pannen (Nav-Leiste „verschwand“). */
 .kalender-wochentage, .kalender-tage {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
 }
 
@@ -950,6 +955,7 @@ input.tipp-eingabe:focus {
   gap: 2px;
   min-height: 42px;
   border: 0;
+  padding: 0;
   border-radius: 12px;
   background: transparent;
   color: var(--ink);
@@ -1957,29 +1963,24 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 
 /* ----- Wettbewerbs-Auswahl ----- */
 
+/* Nur noch das Pokal-Bild als Knopf — keine Pille, kein Chevron (v0.1.2) */
 .wettbewerb-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border-radius: 999px;
-  padding: 7px 12px;
-  min-height: 38px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  white-space: nowrap;
-  background: var(--karte);
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  padding: 2px;
+  min-height: 0;
 }
 
-.wettbewerb-chip svg { width: 19px; height: 19px; flex-shrink: 0; }
-
-.wettbewerb-chip::after {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid var(--ink-2);
-  border-bottom: 2px solid var(--ink-2);
-  transform: rotate(45deg) translateY(-2px);
+.wettbewerb-chip svg {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 7px rgba(0, 0, 0, 0.45));
 }
+
 
 .wb-liste { display: flex; flex-direction: column; gap: 10px; }
 
@@ -2054,23 +2055,30 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 .gruppe-platz { font-weight: 800; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .flagge.mini, .platzhalter-flagge.mini { width: 24px; height: 17px; }
 .gruppe-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.gruppe-werte {
+/* Werte und Legende teilen ein festes Spaltenraster (Sp/Diff/Pkt) — so
+   stehen die Überschriften exakt über ihren Zahlen, drei durchgängige
+   Spalten. Die Quali-Info wohnt hinter dem Info-Knopf im Seitenkopf. */
+.gruppe-werte,
+.gruppe-legende {
+  display: grid;
+  grid-template-columns: 28px 44px 30px;
   font-family: var(--ns-mono);
-  font-size: 0.78rem;
   color: var(--ink-2);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-/* Spalten-Legende über der Tabelle (rechtsbündig über den Werten),
-   Quali-Info darunter — passend zu den farbigen Zonen-Strichen links. */
+
+.gruppe-werte > *,
+.gruppe-legende > * { text-align: right; }
+
+.gruppe-werte { font-size: 0.78rem; }
+
 .gruppe-legende {
-  font-family: var(--ns-mono);
   font-size: 0.7rem;
-  color: var(--ink-2);
-  text-align: right;
+  justify-content: end;
+  padding-right: 2px; /* = horizontales Padding der .gruppe-zeile */
   margin-bottom: 2px;
 }
-.gruppe-fuss { font-size: 0.7rem; color: var(--ink-2); text-align: left; margin-top: 8px; }
 
 .baum-kopfzeile {
   display: flex;
@@ -2080,7 +2088,9 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
   margin: 0 2px 8px;
 }
 
-.baum-hinweis { margin: 0; }
+.baum-kopfzeile { justify-content: flex-end; min-height: 0; }
+
+.baum-kopfzeile:not(:has(button:not([hidden]))) { display: none; }
 
 /* Bühne + Leinwand: ohne JS scrollt die Bühne nativ seitlich (Fallback),
    mit JS (.aktiv) übernehmen Zoom-/Pan-Gesten die Leinwand-Transformation. */
@@ -2324,7 +2334,16 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 .lupe-hero .hero-mitte { min-width: 116px; }
 .lupe-hero .hero-label { margin-top: 2px; }
 
-.stand-punkt { margin: 0 2px; }
+/* Gleiche 1em-Box wie die Odometer-Ziffern: inline-block mit overflow:hidden
+   setzt die Baseline an die Box-Unterkante — bekommen Ziffern UND Doppelpunkt
+   dieselbe Box, fluchten ihre Glyphen exakt (vorher saß der : ~8px tiefer). */
+.stand-punkt {
+  margin: 0 2px;
+  display: inline-block;
+  height: 1em;
+  line-height: 1;
+  overflow: hidden;
+}
 
 /* Punkte-Banner nach Abpfiff: „Du: +3" */
 .punkte-banner {
@@ -2653,10 +2672,19 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
   font-size: 0.56rem;
 }
 
+/* Tipper-Form: exakt = lila (statt Gold), Treffer-Serien glühen */
 .form-punkt.exakt {
-  background: var(--ns-gold);
-  color: var(--ns-bg);
-  box-shadow: 0 0 8px color-mix(in srgb, var(--ns-gold) 55%, transparent);
+  background: var(--ns-lila);
+  color: #fff;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--ns-lila) 55%, transparent);
+}
+
+.formkette.serie {
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--ns-green) 45%, transparent));
+}
+
+.formkette.serie-perfekt {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--ns-lila) 60%, transparent));
 }
 
 /* Live-Prognose neben den echten Punkten (Rangliste + Podium): grün und
@@ -2738,6 +2766,67 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 }
 
 .team-wahl-eintrag.aktiv { border-color: var(--akzent); }
+
+/* Runden-Select als Pille im Stil der Nachbar-Knöpfe (statt Standard-Feld) */
+.filterzeile select {
+  border-radius: 999px;
+  min-height: 36px;
+  padding: 7px 30px 7px 12px;
+  border-color: transparent;
+  background-color: var(--ns-surface-1);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+/* Info-Knopf (Turnier): Quali-Regeln und Zoom-Gesten auf Abruf */
+.info-knopf {
+  width: 34px;
+  height: 34px;
+  min-height: 0;
+  margin-left: auto;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--linie);
+  background: var(--ns-surface-1);
+  color: var(--ink-2);
+  font-family: var(--ns-mono);
+  font-style: italic;
+  font-weight: 700;
+}
+
+/* Mehr-Reiter: Panels stapeln ihre Karten wie die .liste */
+[data-mehr-panel],
+#adminBereich {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pin-wechsel { margin-top: 10px; }
+
+.pin-wechsel summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--akzent);
+  padding: 4px 0;
+}
+
+.pin-wechsel .inline-formular { margin-top: 8px; }
+
+/* Quellen-Logo vor dem Feed-Namen (News-Liste, Reader, Heute-News) */
+.quelle-logo {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  object-fit: cover;
+  vertical-align: -3px;
+  margin-right: 5px;
+  display: inline-block;
+}
+
 
 /* Gruppen: Quali-Zonen (Platz 1-2 direkt, Platz 3 möglich) */
 .gruppe-zeile { position: relative; }

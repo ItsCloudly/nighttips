@@ -19,7 +19,9 @@ import sqlite3
 import threading
 from typing import Any
 
-from ..zeit import jetzt_iso, parse_utc
+from datetime import timedelta
+
+from ..zeit import iso_utc, jetzt_iso, jetzt_utc, parse_utc
 
 logger = logging.getLogger("wm26.live")
 
@@ -160,6 +162,25 @@ _STATUS_EREIGNIS = {
 }
 
 
+# Dedup-Fenster je Ereignistyp (Minuten): identische API-Einträge innerhalb
+# des Fensters sind Artefakte (z. B. Prozess-Überlappung beim Deploy mitten im
+# Spiel), keine neuen Ereignisse. Tor/VAR kurz halten — ein echtes Tor zum
+# gleichen Stand nach VAR-Rücknahme braucht Minuten, kein Sync-Race.
+_DEDUP_FENSTER_MINUTEN = {"tor": 1, "var": 1}
+_DEDUP_STANDARD_MINUTEN = 30
+
+
+def _kuerzlich_vorhanden(conn: sqlite3.Connection, spiel_id: int, typ: str, text: str) -> bool:
+    fenster = _DEDUP_FENSTER_MINUTEN.get(typ, _DEDUP_STANDARD_MINUTEN)
+    grenze = iso_utc(jetzt_utc() - timedelta(minutes=fenster))
+    zeile = conn.execute(
+        "SELECT 1 FROM ereignis WHERE spiel_id = ? AND typ = ? AND text = ?"
+        " AND quelle = 'api' AND erstellt_utc >= ? LIMIT 1",
+        (spiel_id, typ, text, grenze),
+    ).fetchone()
+    return zeile is not None
+
+
 def deltas_verarbeiten(
     conn: sqlite3.Connection,
     *,
@@ -186,7 +207,7 @@ def deltas_verarbeiten(
     status_delta = deltas.get("status")
     if status_delta:
         eintrag = _STATUS_EREIGNIS.get((status_delta[0], status_delta[1]))
-        if eintrag:
+        if eintrag and not _kuerzlich_vorhanden(conn, spiel_id, eintrag[0], eintrag[1]):
             typ, text = eintrag
             neue_ids.append(
                 ereignis_anlegen(conn, spiel_id=spiel_id, typ=typ, minute=minute, text=text)
@@ -205,28 +226,34 @@ def deltas_verarbeiten(
         if alt is None or neu is None:
             continue
         if neu > alt:
-            for _ in range(neu - alt):
+            text = f"Tor für {team_name or '?'} — Stand {stand}"
+            # Dedup-Prüfung VOR der Schleife: ein Doppelpack erzeugt bewusst
+            # zwei gleichlautende Einträge in derselben Transaktion.
+            if not _kuerzlich_vorhanden(conn, spiel_id, "tor", text):
+                for _ in range(neu - alt):
+                    neue_ids.append(
+                        ereignis_anlegen(
+                            conn,
+                            spiel_id=spiel_id,
+                            typ="tor",
+                            minute=minute,
+                            team_id=spiel[team_feld],
+                            text=text,
+                        )
+                    )
+        else:
+            text = f"Korrektur: Stand {stand}"
+            if not _kuerzlich_vorhanden(conn, spiel_id, "var", text):
                 neue_ids.append(
                     ereignis_anlegen(
                         conn,
                         spiel_id=spiel_id,
-                        typ="tor",
+                        typ="var",
                         minute=minute,
                         team_id=spiel[team_feld],
-                        text=f"Tor für {team_name or '?'} — Stand {stand}",
+                        text=text,
                     )
                 )
-        else:
-            neue_ids.append(
-                ereignis_anlegen(
-                    conn,
-                    spiel_id=spiel_id,
-                    typ="var",
-                    minute=minute,
-                    team_id=spiel[team_feld],
-                    text=f"Korrektur: Stand {stand}",
-                )
-            )
     return neue_ids
 
 

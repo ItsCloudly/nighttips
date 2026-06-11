@@ -12,10 +12,11 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
-from .. import db
+from .. import db, ratelimit, security
 from ..abhaengigkeiten import aktueller_nutzer, get_db, get_einstellungen
 from ..config import Einstellungen
-from ..modelle import NameAenderung
+from ..modelle import NameAenderung, PinWechsel
+from ..services import nutzer as nutzer_service
 from ..services import profilbilder
 from ..zeit import jetzt_iso
 
@@ -117,3 +118,30 @@ def name_aendern(
             zeitpunkt_utc=jetzt_iso(),
         )
     return {"anzeigename": neu}
+
+
+@router.post("/me/pin")
+def pin_wechseln(
+    daten: PinWechsel,
+    nutzer: Annotated[sqlite3.Row, Depends(aktueller_nutzer)],
+    conn: Annotated[sqlite3.Connection, Depends(get_db)],
+) -> dict[str, str]:
+    """Eigene PIN ändern (v0.1.2). Beendet alle Sitzungen — auch die aktuelle.
+
+    Rate-Limit vor der scrypt-Prüfung: schützt die CPU und bremst Versuche,
+    die aktuelle PIN einer offenen Sitzung zu erraten.
+    """
+    if not ratelimit.erlaubt(f"pinwechsel:{nutzer['id']}", limit=5, fenster_sekunden=600):
+        raise HTTPException(status_code=429, detail="Zu viele Versuche — bitte kurz warten.")
+    zeile = conn.execute(
+        "SELECT pin_hash FROM nutzer WHERE id = ?", (nutzer["id"],)
+    ).fetchone()
+    if zeile is None or not security.pin_pruefen(daten.alte_pin, zeile["pin_hash"]):
+        raise HTTPException(status_code=403, detail="Die aktuelle PIN ist falsch.")
+    try:
+        nutzer_service.pin_aendern(
+            conn, nutzer_id=nutzer["id"], neue_pin=daten.neue_pin, akteur=nutzer["anzeigename"]
+        )
+    except ValueError as fehler:
+        raise HTTPException(status_code=422, detail=str(fehler)) from fehler
+    return {"status": "ok", "hinweis": "PIN geändert — bitte neu anmelden."}

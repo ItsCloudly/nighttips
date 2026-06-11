@@ -1,3 +1,3 @@
 """WM26 — Tippspiel-App zur Fußball-WM 2026."""
 
-APP_VERSION = "0.1.1"
+APP_VERSION = "0.1.2"

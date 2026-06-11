@@ -80,6 +80,28 @@ def test_halbzeit_uebergaenge(conn, einstellungen):
     assert "2. Halbzeit" in letzte["text"]
 
 
+def test_doppelte_deltas_erzeugen_keine_doppelten_ereignisse(conn, einstellungen):
+    """Race-Nachstellung (z. B. Prozess-Überlappung beim Deploy): dieselben
+    Deltas ein zweites Mal verarbeitet → keine doppelten Ticker-Einträge."""
+    from app import db
+
+    api = ApiAttrappe(API_TEAMS, [_match_mit("TIMED", (0, 0))])
+    sync.stammdaten_sync(conn, einstellungen, api=api)
+    api = ApiAttrappe(API_TEAMS, [_match_mit("IN_PLAY", (1, 0), minute=9)])
+    sync.ergebnis_sync(conn, einstellungen, api=api)
+    assert [e["typ"] for e in _ereignisse(conn)] == ["anpfiff", "tor"]
+
+    spiel_id = conn.execute("SELECT id FROM spiel").fetchone()["id"]
+    with db.schreib_transaktion(conn):
+        neue = live.deltas_verarbeiten(
+            conn,
+            spiel_id=spiel_id,
+            deltas={"status": ("geplant", "live"), "tore_heim": (0, 1)},
+        )
+    assert neue == []
+    assert [e["typ"] for e in _ereignisse(conn)] == ["anpfiff", "tor"]
+
+
 def test_api_flattern_erzeugt_keine_geistertore(conn, einstellungen):
     """Pendelt die API zwischen neuem und altem Stand (Cache-Flattern beim
     4-Sekunden-Poll), bleibt es bei EINEM Tor — keine Geister-Korrekturen."""

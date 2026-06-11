@@ -9,9 +9,9 @@
 <link rel="icon" href="/icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <link rel="preload" href="/fonts/space-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/styles.css?v=35">
+<link rel="stylesheet" href="/styles.css?v=37">
 <!-- FOUC-Schutz: Modus vor dem ersten Rendern setzen; extern statt inline (CSP) -->
-<script src="/boot.js?v=35"></script>
+<script src="/boot.js?v=37"></script>
 </head>
 <body>
 <div class="app-shell">
@@ -167,9 +167,14 @@
       </header>
       <div id="podium" class="podium" hidden></div>
       <div id="ranglisteListe" class="liste"></div>
-      <div id="bonusBereich" hidden>
-        <h2 class="abschnitt-titel bonus-titel">
-          <img src="/illustrationen/bonus-question.webp" alt="" loading="lazy">Bonusfragen</h2>
+    </section>
+
+    <section id="view-bonus" class="view" hidden>
+      <header class="seitenkopf">
+        <h1 class="bonus-titel">
+          <img src="/illustrationen/bonus-question.webp" alt="" loading="lazy">Bonusfragen</h1>
+      </header>
+      <div id="bonusBereich">
         <div id="bonusListe" class="liste"></div>
       </div>
     </section>
@@ -182,6 +187,8 @@
             <button data-turnier="gruppen" class="aktiv" role="tab" aria-selected="true">Gruppen</button>
             <button data-turnier="baum" role="tab" aria-selected="false">K.o.-Baum</button>
           </div>
+          <button type="button" id="turnierInfo" class="info-knopf"
+                  aria-label="Hinweise zu Qualifikation und Bedienung">i</button>
         </div>
       </header>
       <div id="turnierInhalt"></div>
@@ -211,15 +218,19 @@
     </section>
 
     <section id="view-mehr" class="view" hidden>
-      <header class="seitenkopf"><h1>Mehr</h1></header>
-      <div class="liste">
-        <div class="karte">
-          <h2>Entdecken</h2>
-          <div class="knopfzeile">
-            <button data-mehr-ziel="news">📰 News-Archiv</button>
-            <button data-mehr-ziel="teams">🛡️ Alle Teams</button>
+      <header class="seitenkopf">
+        <h1>Mehr</h1>
+        <div class="filterzeile">
+          <div class="segmente klein" id="mehrTabs" role="tablist" aria-label="Bereich wählen">
+            <button data-mehr-tab="profil" class="aktiv" role="tab" aria-selected="true">Profil</button>
+            <button data-mehr-tab="mitteilungen" role="tab" aria-selected="false">Mitteilungen</button>
+            <button data-mehr-tab="app" role="tab" aria-selected="false">App</button>
+            <button data-mehr-tab="admin" role="tab" aria-selected="false" hidden>Admin</button>
           </div>
         </div>
+      </header>
+      <div class="liste">
+        <div data-mehr-panel="profil">
         <div class="karte">
           <h2>Konto</h2>
           <p id="kontoInfo"></p>
@@ -239,6 +250,30 @@
               <input id="profilbildDatei" type="file"
                      accept="image/png,image/jpeg,image/webp" hidden>
             </div>
+          </div>
+          <details class="pin-wechsel">
+            <summary>PIN ändern</summary>
+            <form id="pinFormular" class="inline-formular">
+              <input id="pinAlt" type="password" placeholder="Aktuelle PIN" required
+                     minlength="4" maxlength="32" autocomplete="current-password"
+                     aria-label="Aktuelle PIN">
+              <input id="pinNeu" type="password" placeholder="Neue PIN (mind. 6 Zeichen)" required
+                     minlength="6" maxlength="32" autocomplete="new-password"
+                     aria-label="Neue PIN">
+              <button type="submit" class="primaer">PIN ändern</button>
+            </form>
+            <p class="hinweis">Nach dem Wechsel wirst du auf allen Geräten abgemeldet.</p>
+          </details>
+          <div class="knopfzeile">
+            <button id="logoutKnopf" class="gefahr">Abmelden</button>
+          </div>
+          <p id="appVersion" class="hinweis"></p>
+        </div>
+        </div>
+        <div data-mehr-panel="mitteilungen" hidden>
+        <div class="karte">
+          <h2>Mitteilungen</h2>
+          <div class="einstellung-liste">
             <label class="toggle-zeile master" id="pushZeile" hidden>
               <span><strong>Benachrichtigungen</strong><br>
                 <span class="hinweis-zeile">Tore, Anpfiff &amp; Endstand aufs Handy</span></span>
@@ -258,11 +293,16 @@
               </select>
             </div>
           </div>
-          <div class="knopfzeile">
-            <button id="logoutKnopf" class="gefahr">Abmelden</button>
-          </div>
           <p id="pushHinweis" class="hinweis" hidden></p>
-          <p id="appVersion" class="hinweis"></p>
+        </div>
+        </div>
+        <div data-mehr-panel="app" hidden>
+        <div class="karte">
+          <h2>Entdecken</h2>
+          <div class="knopfzeile">
+            <button data-mehr-ziel="news">📰 News-Archiv</button>
+            <button data-mehr-ziel="teams">🛡️ Alle Teams</button>
+          </div>
         </div>
         <div class="karte">
           <h2>Feedback</h2>
@@ -296,6 +336,8 @@
             <li>K.o.-Spiele: Elfmeterschießen zählt als Unentschieden.</li>
           </ul>
         </div>
+        </div>
+        <div data-mehr-panel="admin" hidden>
         <div id="adminBereich" hidden>
           <div class="karte">
             <h2>Verwaltung</h2>
@@ -382,6 +424,7 @@
             <div id="overrideListe"></div>
           </div>
         </div>
+        </div>
       </div>
     </section>
 
@@ -421,6 +464,6 @@
 
   <div id="toast" class="toast" hidden></div>
 </div>
-<script src="/app.js?v=35"></script>
+<script src="/app.js?v=37"></script>
 </body>
 </html>

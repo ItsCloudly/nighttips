@@ -137,9 +137,9 @@ function fehlerAnzeigen(fehler) {
 
 /* ---------- Ansichten umschalten ---------- */
 
-const ANSICHTEN = ["login", "onboarding", "heute", "spiele", "rangliste", "turnier", "teams", "news", "mehr"];
-// Teams/News leben unter "Mehr" — der Tab bleibt dann aktiv markiert
-const NAV_ZUORDNUNG = { teams: "mehr", news: "mehr" };
+const ANSICHTEN = ["login", "onboarding", "heute", "spiele", "rangliste", "bonus", "turnier", "teams", "news", "mehr"];
+// Teams/News leben unter "Mehr", Bonusfragen unter "Heute" — der Tab bleibt aktiv markiert
+const NAV_ZUORDNUNG = { teams: "mehr", news: "mehr", bonus: "heute" };
 
 function zeigeAnsicht(name) {
   for (const ansicht of ANSICHTEN) {
@@ -153,10 +153,21 @@ function zeigeAnsicht(name) {
   window.scrollTo(0, 0);
   if (name === "heute") heuteRendern().catch(fehlerAnzeigen);
   if (name === "rangliste") ranglisteLaden().catch(fehlerAnzeigen);
+  if (name === "bonus") bonusfragenLaden().catch(fehlerAnzeigen);
   if (name === "turnier") turnierRendern().catch(fehlerAnzeigen);
   if (name === "teams") teamsRendern();
   if (name === "news") newsLaden().catch(fehlerAnzeigen);
   if (name === "mehr") verwaltungLaden().catch(fehlerAnzeigen);
+}
+
+/* Setzt innerHTML nur bei tatsächlicher Änderung. Verhindert, dass die
+   Einblend-Animationen der Karten bei jedem Refresh (Tab-Wechsel, SSE,
+   Polling) erneut feuern — das wirkte wie doppeltes Laden/Flackern. */
+function htmlAktualisieren(ziel, html) {
+  if (ziel.__htmlStand === html) return false;
+  ziel.__htmlStand = html;
+  ziel.innerHTML = html;
+  return true;
 }
 
 function zeigeLogin() {
@@ -587,7 +598,9 @@ function countdownText(bisMs) {
 function spielminuteText(spiel) {
   if (spiel.status !== "live") return "";
   const zeit = spiel.live_zeit ?? {};
-  const anzeige = (minute, limit) => (minute > limit ? `${limit}+’` : `${Math.max(minute, 1)}’`);
+  // Nachspielzeit zählt hoch: 45+1’, 45+2’ … bzw. 90+1’, 90+2’ …
+  const anzeige = (minute, limit) =>
+    minute > limit ? `${limit}+${minute - limit}’` : `${Math.max(minute, 1)}’`;
   if (zeit.zweite_hz_utc) {
     return anzeige(46 + Math.floor((Date.now() - new Date(zeit.zweite_hz_utc)) / 60000), 90);
   }
@@ -620,11 +633,14 @@ setInterval(() => {
 
 function countdownStarten() {
   clearInterval(countdownTimer);
-  countdownTimer = setInterval(() => {
+  // Der Hero wird ohne Zeitwert gerendert (sonst änderte sich sein HTML
+  // jede Sekunde und der Flacker-Schutz von htmlAktualisieren liefe leer);
+  // der erste Tick füllt ihn sofort, danach übernimmt das Intervall.
+  const tick = () => {
     const karte = el("heuteInhalt").querySelector("[data-anstoss]");
     if (!karte) {
       clearInterval(countdownTimer);
-      return;
+      return false;
     }
     const rest = new Date(karte.dataset.anstoss) - new Date();
     const zeit = karte.querySelector(".hero-countdown");
@@ -634,10 +650,12 @@ function countdownStarten() {
       clearInterval(countdownTimer);
       if (zeit) zeit.textContent = "Anpfiff …";
       heuteAnpfiffAbwarten(Number(karte.dataset.spielLupe));
-      return;
+      return false;
     }
     if (zeit) zeit.textContent = countdownText(rest);
-  }, 1000);
+    return true;
+  };
+  if (tick()) countdownTimer = setInterval(tick, 1000);
 }
 
 /* Wartet gelassen auf den Statuswechsel (SSE aktualisiert zustand.spiele);
@@ -691,18 +709,19 @@ function heuteHeroHtml(spiel, istLive) {
   const mitte = istLive
     ? `<div class="hero-stand">${spiel.tore_heim ?? 0} : ${spiel.tore_gast ?? 0}</div>
        ${liveBadgeHtml(spiel)}`
-    : `<div class="hero-countdown">${
-        new Date(spiel.anstoss_utc) > new Date()
-          ? countdownText(new Date(spiel.anstoss_utc) - new Date())
-          : "Anpfiff …"
-      }</div>
+    : `<div class="hero-countdown"></div>
        <span class="hero-label">Nächster Anpfiff</span>`;
+  // Ohne bekanntes Stadion bleibt die Runde zentriert — eine einsame
+  // linksbündige Zeile sähe unfertig aus.
+  const metaZeile = spiel.stadion
+    ? `<div class="hero-meta hero-meta-zeile"><span>${escapeHtml(spiel.runde)}</span><span>${escapeHtml(
+        spiel.stadion
+      )}</span></div>`
+    : `<div class="hero-meta">${escapeHtml(spiel.runde)}</div>`;
   return `<button class="heute-hero" data-spiel-lupe="${spiel.id}"
       ${istLive ? "" : `data-anstoss="${spiel.anstoss_utc}"`}
       aria-label="Zum Spiel ${escapeHtml(spiel.heim?.name ?? "?")} gegen ${escapeHtml(spiel.gast?.name ?? "?")}">
-    <div class="hero-meta hero-meta-zeile"><span>${escapeHtml(spiel.runde)}</span><span>${
-      spiel.stadion ? escapeHtml(spiel.stadion) : ""
-    }</span></div>
+    ${metaZeile}
     <div class="hero-duell">
       ${heroTeamHtml(spiel.heim)}
       <div class="hero-mitte">${mitte}</div>
@@ -772,7 +791,9 @@ async function heuteRendern() {
     teile.push('<h2 class="tages-titel">Kommende Spiele</h2>');
     teile.push(`<div class="teaser-leiste">${kommend.map(kommendKarteHtml).join("")}</div>`);
   }
-  el("heuteInhalt").innerHTML = teile.join("");
+  // Fester Slot für die News: bleibt bei unverändertem Kern-HTML einfach stehen
+  teile.push('<div data-news-slot></div>');
+  htmlAktualisieren(el("heuteInhalt"), teile.join(""));
   countdownStarten();
   newsTeaserLaden().catch(() => {});
 }
@@ -798,20 +819,18 @@ function kommendKarteHtml(spiel) {
    (die horizontale Leiste oben gehört jetzt den kommenden Spielen). */
 async function newsTeaserLaden() {
   const items = await api("/api/news?limit=10");
-  if (!items.length || el("view-heute").hidden) return;
+  const slot = el("heuteInhalt").querySelector("[data-news-slot]");
+  if (!items.length || el("view-heute").hidden || !slot) return;
   zustand.teaserItems = items;
   const karten = items
     .map(
       (item, index) => `<button class="news-zeile" data-teaser-reader="${index}">
-        <span class="teaser-quelle">${escapeHtml(item.feed_titel ?? "News")}</span>
+        <span class="teaser-quelle">${quellenLogoHtml(item.feed_titel)}${escapeHtml(item.feed_titel ?? "News")}</span>
         <span class="teaser-titel">${escapeHtml(item.titel)}</span>
       </button>`
     )
     .join("");
-  el("heuteInhalt").insertAdjacentHTML(
-    "beforeend",
-    `<h2 class="tages-titel">News</h2><div class="news-bereich">${karten}</div>`
-  );
+  htmlAktualisieren(slot, `<h2 class="tages-titel">News</h2><div class="news-bereich">${karten}</div>`);
 }
 
 function spieleRendern(flashId = null) {
@@ -822,23 +841,23 @@ function spieleRendern(flashId = null) {
     zustand.filterStatus === "alle" && !zustand.filterGruppe && !zustand.filterTeam;
   if (!spiele.length) {
     if (zustand.filterStatus === "live") {
-      liste.innerHTML = emptyStateHtml(
+      htmlAktualisieren(liste, emptyStateHtml(
         "empty-no-live",
         "Gerade kein Live-Spiel",
         "Das Flutlicht macht Pause — der nächste Anpfiff kommt bestimmt."
-      );
+      ));
     } else if (zustand.spieleTag !== "alle") {
-      liste.innerHTML = emptyStateHtml(
+      htmlAktualisieren(liste, emptyStateHtml(
         "empty-no-matches",
         "Spielfrei",
         "An diesem Tag ruht der Ball. Such dir einen anderen Tag aus!"
-      );
+      ));
     } else {
-      liste.innerHTML = emptyStateHtml(
+      htmlAktualisieren(liste, emptyStateHtml(
         "empty-no-matches",
         "Keine Spiele gefunden",
         "Für diesen Filter ist nichts dabei — probier eine andere Kombination."
-      );
+      ));
     }
     return;
   }
@@ -877,7 +896,7 @@ function spieleRendern(flashId = null) {
       </details>`);
     }
   }
-  liste.innerHTML = stuecke.join("");
+  htmlAktualisieren(liste, stuecke.join(""));
 }
 
 async function tippSpeichern(spielId, karte) {
@@ -1006,10 +1025,8 @@ function heuteEreignisse() {
       }
       zeigeAnsicht("spiele");
       spieleRendern();
-    } else if (ziel === "bonus") {
-      zeigeAnsicht("rangliste");
-      setTimeout(() => el("bonusBereich").scrollIntoView({ behavior: "smooth" }), 350);
     } else {
+      // "bonus" ist seit v0.1.2 eine eigene Ansicht (nicht mehr unter der Rangliste)
       zeigeAnsicht(ziel);
     }
   });
@@ -2280,15 +2297,17 @@ function gruppenGitterHtml(tabellen) {
             <span class="gruppe-platz">${zeile.platz}</span>
             ${teamFlagge(zeile.team_id)}
             <span class="gruppe-name">${escapeHtml(zeile.name)}</span>
-            <span class="gruppe-werte">${zeile.spiele} · ${diff} · <strong>${zeile.punkte}</strong></span>
+            <span class="gruppe-werte"><span>${zeile.spiele}</span><span>${diff}</span><strong>${zeile.punkte}</strong></span>
           </button>`;
         })
         .join("");
+      // Legende und Werte teilen dasselbe Spaltenraster — so stehen die
+      // Überschriften exakt über ihren Zahlen. Der Quali-Hinweis wohnt
+      // jetzt hinter dem Info-Knopf im Seitenkopf.
       return `<div class="karte gruppe-karte">
         <h3>Gruppe ${escapeHtml(gruppe)}</h3>
-        <div class="gruppe-legende" aria-hidden="true">Sp. · Diff. · Pkt.</div>
+        <div class="gruppe-legende" aria-hidden="true"><span>Sp.</span><span>Diff.</span><span>Pkt.</span></div>
         ${zeilen}
-        <div class="gruppe-fuss">Platz 1–2 direkt weiter · Platz 3 möglich (beste Dritte)</div>
       </div>`;
     })
     .join("")}</div>`;
@@ -2390,7 +2409,6 @@ function koBaumHtml() {
     )
     .join("");
   return `<div class="baum-kopfzeile">
-      <p class="hinweis baum-hinweis">Ziehen · kneifen oder doppeltippen zum Zoomen · Spiel antippen</p>
       <button type="button" class="klein baum-reset" data-baum-reset hidden>⤢ Übersicht</button>
     </div>
     <div class="baum-buehne" data-baum-buehne>
@@ -2534,9 +2552,9 @@ async function turnierRendern() {
   const inhalt = el("turnierInhalt");
   if (zustand.turnierModus === "gruppen") {
     const tabellen = await api("/api/tabellen");
-    inhalt.innerHTML = gruppenGitterHtml(tabellen);
-  } else {
-    inhalt.innerHTML = koBaumHtml();
+    htmlAktualisieren(inhalt, gruppenGitterHtml(tabellen));
+  } else if (htmlAktualisieren(inhalt, koBaumHtml())) {
+    // Zoom/Pan nur neu verdrahten, wenn das DOM wirklich ersetzt wurde
     baumZoomEinrichten();
   }
 }
@@ -2552,6 +2570,18 @@ function turnierEreignisse() {
       turnierRendern().catch(fehlerAnzeigen);
     });
   }
+  // Quali-Regeln und Zoom-Gesten stecken hinter dem Info-Knopf (v0.1.2)
+  el("turnierInfo").addEventListener("click", () => {
+    lupeOeffnen(`<article class="reader" data-groesse="m">
+      <h2>So funktioniert das Turnier</h2>
+      <h3>Gruppenphase</h3>
+      <p>Platz 1 und 2 jeder Gruppe kommen direkt weiter. Platz 3 hat als einer
+        der acht besten Gruppendritten noch eine Chance aufs Sechzehntelfinale.</p>
+      <h3>K.o.-Baum bedienen</h3>
+      <p>Ziehen zum Verschieben, kneifen oder doppeltippen zum Zoomen —
+        ein Tipp auf ein Spiel öffnet die Details.</p>
+    </article>`);
+  });
   el("turnierInhalt").addEventListener("click", (ereignis) => {
     const team = ereignis.target.closest("[data-team-lupe]");
     if (team) {
@@ -2625,10 +2655,13 @@ async function newsLaden() {
   const liste = el("newsListe");
   zustand.newsItems = items;
   if (!items.length) {
-    liste.innerHTML = emptyStateHtml(
-      "empty-no-news",
-      "Noch keine News",
-      "Das Radio sucht noch nach einem Signal — sobald die Feeds liefern, steht hier alles Wichtige."
+    htmlAktualisieren(
+      liste,
+      emptyStateHtml(
+        "empty-no-news",
+        "Noch keine News",
+        "Das Radio sucht noch nach einem Signal — sobald die Feeds liefern, steht hier alles Wichtige."
+      )
     );
     return;
   }
@@ -2638,7 +2671,7 @@ async function newsLaden() {
     `<button class="news-hero" data-news-reader="0">
       <img src="/illustrationen/news-fallback.webp" alt="" loading="lazy">
       <span class="news-hero-text">
-        <span class="news-quelle">${escapeHtml(hero.feed_titel ?? "Feed")}${
+        <span class="news-quelle">${quellenLogoHtml(hero.feed_titel)}${escapeHtml(hero.feed_titel ?? "Feed")}${
           hero.veroeffentlicht_utc ? ` · ${lokalerTag(hero.veroeffentlicht_utc)}` : ""
         }</span>
         <strong>${escapeHtml(hero.titel)}</strong>
@@ -2657,13 +2690,25 @@ async function newsLaden() {
         .map((tag) => `<span class="team-chip tag">${escapeHtml(tag)}</span>`)
         .join("");
       return `<article class="karte news-karte" data-news-reader="${index + 1}" role="button" tabindex="0">
-        <div class="news-quelle">${escapeHtml(item.feed_titel ?? "Feed")} · ${zeit} ${teamChip}${tagChips}</div>
+        <div class="news-quelle">${quellenLogoHtml(item.feed_titel)}${escapeHtml(item.feed_titel ?? "Feed")} · ${zeit} ${teamChip}${tagChips}</div>
         <span class="news-titel">${escapeHtml(item.titel)}</span>
         ${item.zusammenfassung ? `<p class="news-text">${escapeHtml(item.zusammenfassung)}</p>` : ""}
       </article>`;
     })
   );
-  liste.innerHTML = stuecke.join("");
+  htmlAktualisieren(liste, stuecke.join(""));
+}
+
+/* Quellen-Logos vor dem Feed-Namen (lokale Kopien der Favicons) — neue
+   Feeds ohne Logo zeigen einfach weiter nur ihren Namen. */
+const QUELLEN_LOGOS = [
+  { muster: /sportschau/i, bild: "/icons/quellen/sportschau.png" },
+  { muster: /kicker/i, bild: "/icons/quellen/kicker.png" },
+];
+
+function quellenLogoHtml(feedTitel) {
+  const eintrag = QUELLEN_LOGOS.find((quelle) => quelle.muster.test(feedTitel ?? ""));
+  return eintrag ? `<img class="quelle-logo" src="${eintrag.bild}" alt="" loading="lazy">` : "";
 }
 
 /* News-Reader-Sheet: Artikel im Vollbild-Sheet mit Aa-Regler */
@@ -2679,7 +2724,7 @@ function newsReaderOeffnen(item) {
       <button class="klein" data-reader-aa aria-label="Schriftgröße ändern">Aa</button>
     </div>
     <h2 class="reader-titel">${escapeHtml(item.titel)}</h2>
-    <p class="reader-meta">${escapeHtml(item.feed_titel ?? "Feed")} · ${zeit}${
+    <p class="reader-meta">${quellenLogoHtml(item.feed_titel)}${escapeHtml(item.feed_titel ?? "Feed")} · ${zeit}${
       item.team_name ? ` · ${escapeHtml(item.team_name)}` : ""
     }</p>
     <div class="reader-text">${
@@ -2707,11 +2752,11 @@ async function ranglisteLaden() {
   const liste = el("ranglisteListe");
   if (!eintraege.length) {
     podium.hidden = true;
-    liste.innerHTML = emptyStateHtml(
+    htmlAktualisieren(liste, emptyStateHtml(
       "empty-no-tipps",
       "Noch keine Wertung",
       "Sobald das erste Spiel gewertet ist, füllt sich die Rangliste."
-    );
+    ));
   } else {
     const spitze = eintraege.filter((eintrag) => eintrag.platz <= 3).slice(0, 3);
     const zeigePodium = zustand.zeitraum === "gesamt" && spitze.some((e) => e.punkte > 0);
@@ -2719,7 +2764,7 @@ async function ranglisteLaden() {
     if (zeigePodium) {
       const klassen = ["eins", "zwei", "drei"];
       const medaillen = ["🥇", "🥈", "🥉"];
-      podium.innerHTML =
+      const podiumHtml =
         `<img class="podium-bild" src="/illustrationen/podium.webp" alt="" loading="lazy">` +
         `<div class="podium-plaetze">` +
         spitze
@@ -2735,6 +2780,7 @@ async function ranglisteLaden() {
           })
           .join("") +
         `</div>`;
+      htmlAktualisieren(podium, podiumHtml);
     }
     // Eine Tabelle statt Einzelkarten: die Spalten-Labels stehen genau einmal
     // im Kopf. Tendenz erst ab 720 px (.nur-breit), sonst wird 375 px zu eng.
@@ -2758,7 +2804,7 @@ async function ranglisteLaden() {
         </tr>`;
       })
       .join("");
-    liste.innerHTML = `<div class="karte rang-tabelle-karte">
+    htmlAktualisieren(liste, `<div class="karte rang-tabelle-karte">
       <table class="rang-tabelle">
         <thead><tr>
           <th class="num" aria-label="Platz">#</th>
@@ -2779,9 +2825,8 @@ async function ranglisteLaden() {
           ? " · grünes +x = Prognose, falls die laufenden Spiele so enden"
           : ""
       }</p>
-    </div>`;
+    </div>`);
   }
-  await bonusfragenLaden().catch(fehlerAnzeigen);
 }
 
 /* Live-Prognose: Punkte, die ein Tipper bekäme, würden die gerade laufenden
@@ -2797,14 +2842,30 @@ function livePrognoseChip(eintrag, immerAnzeigen = false) {
   return ` <span class="rang-live" title="Prognose: Enden die laufenden Spiele so, kommen +${eintrag.punkte_live} dazu">+${eintrag.punkte_live}</span>`;
 }
 
-/* Formkette eines Tippers: Punkte der letzten gewerteten Tipps als Farbpunkte
-   (4 = gold, 3 = grün, 2 = grau, 0 = rot) */
+/* Formkette eines Tippers (neueste zuerst): Symbole statt Punktzahlen —
+   ++ = exakt (lila), + = Differenz (grün), · = Tendenz (grau), − = daneben
+   (rot). Das Streak-System schaut auf Serien: 3+ Treffer in Folge lassen die
+   Kette grün glühen, 2+ exakte in Folge lila. */
 function tipperFormkette(form) {
   if (!form?.length) return "";
-  const klasse = (punkte) =>
-    punkte >= 4 ? "exakt" : punkte === 3 ? "s" : punkte === 2 ? "u" : "n";
-  return `<span class="formkette klein" aria-label="Letzte Tipps">${form
-    .map((punkte) => `<span class="form-punkt ${klasse(punkte)}">${punkte}</span>`)
+  const symbol = (p) => (p >= 4 ? "++" : p === 3 ? "+" : p === 2 ? "·" : "−");
+  const klasse = (p) => (p >= 4 ? "exakt" : p === 3 ? "s" : p === 2 ? "u" : "n");
+  const titel = (p) => (p >= 4 ? "exakt" : p === 3 ? "Differenz" : p === 2 ? "Tendenz" : "daneben");
+  let treffer = 0;
+  while (treffer < form.length && form[treffer] > 0) treffer += 1;
+  let perfekt = 0;
+  while (perfekt < form.length && form[perfekt] >= 4) perfekt += 1;
+  const serie = perfekt >= 2 ? " serie-perfekt" : treffer >= 3 ? " serie" : "";
+  const serienTitel =
+    perfekt >= 2
+      ? `Perfekte Serie: ${perfekt}× exakt in Folge`
+      : treffer >= 3
+        ? `Serie: ${treffer} Treffer in Folge`
+        : "Letzte Tipps, neueste zuerst";
+  return `<span class="formkette klein${serie}" title="${serienTitel}" aria-label="${serienTitel}">${form
+    .map(
+      (p) => `<span class="form-punkt ${klasse(p)}" title="+${p} (${titel(p)})">${symbol(p)}</span>`
+    )
     .join("")}</span>`;
 }
 
@@ -2840,8 +2901,14 @@ function bonusAntwortFeld(frage) {
 
 async function bonusfragenLaden() {
   const fragen = await api("/api/bonusfragen");
-  el("bonusBereich").hidden = !fragen.length;
-  if (!fragen.length) return;
+  if (!fragen.length) {
+    el("bonusListe").innerHTML = emptyStateHtml(
+      "bonus-question",
+      "Keine Bonusfragen",
+      "Sobald der Admin Fragen stellt, kannst du hier extra Punkte holen."
+    );
+    return;
+  }
   el("bonusListe").innerHTML = fragen
     .map((frage) => {
       const schluss = `${lokalerTag(frage.einsendeschluss_utc)}, ${lokaleUhrzeit(frage.einsendeschluss_utc)} Uhr`;
@@ -3057,13 +3124,25 @@ async function pushUmschalten() {
 
 /* Wettbewerbs-Icons (Strichstil wie die Tab-Bar): Pokal für die WM,
    Ball für die Bundesliga. */
+// Der Heute-Kopf zeigt nur noch das Pokal-Bild (kein Pillen-Knopf mehr);
+// für die Bundesliga fehlt ein freies Logo — bis dahin der Ball.
 const WETTBEWERB_ICONS = {
-  WC: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v3a4 4 0 0 1-4 4h-4A4 4 0 0 1 6 7Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 5H4a2 2 0 0 0 2 4M18 5h2a2 2 0 0 1-2 4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v4m-3 5h6m-3-5v5" stroke="currentColor" stroke-width="1.8"/></svg>',
+  WC: `<svg viewBox="0 0 24 24" aria-hidden="true">
+    <defs><linearGradient id="wbGold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe9a8"/><stop offset="0.55" stop-color="#f2c14e"/>
+      <stop offset="1" stop-color="#b8860b"/></linearGradient></defs>
+    <circle cx="12" cy="6.1" r="3.5" fill="url(#wbGold)"/>
+    <path d="M7.2 8.9c.9 2.4 2.4 3.7 4.8 3.7s3.9-1.3 4.8-3.7c1.1 3.2-.3 6-2.8 7.1l.5 3.1H9.5l.5-3.1c-2.5-1.1-3.9-3.9-2.8-7.1Z" fill="url(#wbGold)"/>
+    <rect x="7.4" y="20" width="9.2" height="2.4" rx="1" fill="url(#wbGold)"/>
+  </svg>`,
   BL1: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.2 16.4 10.4 14.7 15.6H9.3L7.6 10.4Z" fill="currentColor"/></svg>',
 };
 
-function wettbewerbIcon(code) {
-  return WETTBEWERB_ICONS[code] ?? WETTBEWERB_ICONS.WC;
+function wettbewerbIcon(code, suffix = "") {
+  const svg = WETTBEWERB_ICONS[code] ?? WETTBEWERB_ICONS.WC;
+  // SVG-ids müssen dokumentweit eindeutig sein — die Auswahl-Lupe rendert
+  // das Icon zusätzlich zum Kopf-Knopf, daher dort mit Suffix.
+  return suffix ? svg.replaceAll("wbGold", `wbGold-${suffix}`) : svg;
 }
 
 async function wettbewerbeLaden() {
@@ -3078,9 +3157,10 @@ async function wettbewerbeLaden() {
     knopf.hidden = true;
     return;
   }
-  // Icon statt Textliste: Pokal + Saison, der volle Name wandert ins aria-label.
-  knopf.innerHTML = `${wettbewerbIcon(aktiv.code)}<span>${escapeHtml(aktiv.saison)}</span>`;
+  // Nur das Pokal-Bild als Knopf — Name und Saison wandern ins aria-label/title.
+  knopf.innerHTML = wettbewerbIcon(aktiv.code);
   knopf.setAttribute("aria-label", `Wettbewerb wählen — aktiv: ${aktiv.name} ${aktiv.saison}`);
+  knopf.setAttribute("title", `${aktiv.name} ${aktiv.saison}`);
   knopf.hidden = false;
 }
 
@@ -3098,7 +3178,7 @@ function wettbewerbsWahlOeffnen() {
       : `<span class="badge">${escapeHtml(wettbewerb.hinweis ?? "Bald")}</span>`;
     teile.push(`<button class="wb-eintrag ${wettbewerb.aktiv ? "aktuell" : "bald"}"
         data-wettbewerb="${escapeHtml(wettbewerb.code)}"${wettbewerb.aktiv ? "" : ' aria-disabled="true"'}>
-      <span class="wb-logo${wettbewerb.code === "BL1" ? " bl" : ""}">${wettbewerbIcon(wettbewerb.code)}</span>
+      <span class="wb-logo${wettbewerb.code === "BL1" ? " bl" : ""}">${wettbewerbIcon(wettbewerb.code, `liste-${wettbewerb.code}`)}</span>
       <span style="min-width:0">
         <span class="wb-name">${escapeHtml(wettbewerb.name)} ${escapeHtml(wettbewerb.saison)}</span><br>
         <span class="wb-detail">${escapeHtml(wettbewerb.beschreibung ?? "")}</span>
@@ -3236,6 +3316,7 @@ function adminMeldung(text, istFehler = false) {
 }
 
 async function verwaltungLaden() {
+  mehrTabAnwenden();
   await pushStatusLaden();
   api("/api/health")
     .then((info) => {
@@ -3243,6 +3324,11 @@ async function verwaltungLaden() {
     })
     .catch(() => {});
   if (zustand.nutzer?.rolle !== "admin") return;
+  // Die acht Admin-Listen erst laden, wenn der Admin-Reiter wirklich offen ist
+  if ((zustand.mehrTab ?? "profil") === "admin") await adminDatenLaden();
+}
+
+async function adminDatenLaden() {
   await Promise.all([
     syncStatusLaden(),
     nutzerLaden().catch(fehlerAnzeigen),
@@ -3253,6 +3339,26 @@ async function verwaltungLaden() {
     tokensLaden().catch(fehlerAnzeigen),
     beitraegeLaden().catch(fehlerAnzeigen),
   ]);
+}
+
+/* Reiter im Mehr-Tab (v0.1.2): Profil / Mitteilungen / App / Admin */
+function mehrTabAnwenden() {
+  let tab = zustand.mehrTab ?? "profil";
+  // Reiter existiert nicht oder ist versteckt (z. B. Admin-Tab nach
+  // Nutzerwechsel ohne Reload): zurück auf Profil statt leerer Seite.
+  const ziel = el("mehrTabs").querySelector(`[data-mehr-tab="${tab}"]`);
+  if (!ziel || ziel.hidden) {
+    tab = "profil";
+    zustand.mehrTab = "profil";
+  }
+  for (const knopf of el("mehrTabs").querySelectorAll("button")) {
+    const aktiv = knopf.dataset.mehrTab === tab;
+    knopf.classList.toggle("aktiv", aktiv);
+    knopf.setAttribute("aria-selected", aktiv ? "true" : "false");
+  }
+  for (const panel of document.querySelectorAll("[data-mehr-panel]")) {
+    panel.hidden = panel.dataset.mehrPanel !== tab;
+  }
 }
 
 async function nutzerLaden() {
@@ -3468,6 +3574,31 @@ function mehrEreignisse() {
   for (const knopf of document.querySelectorAll("[data-mehr-ziel]")) {
     knopf.addEventListener("click", () => zeigeAnsicht(knopf.dataset.mehrZiel));
   }
+  el("mehrTabs").addEventListener("click", (ereignis) => {
+    const knopf = ereignis.target.closest("button[data-mehr-tab]");
+    if (!knopf) return;
+    zustand.mehrTab = knopf.dataset.mehrTab;
+    mehrTabAnwenden();
+    if (zustand.mehrTab === "admin" && zustand.nutzer?.rolle === "admin") {
+      adminDatenLaden().catch(fehlerAnzeigen);
+    }
+  });
+  // PIN ändern (v0.1.2): bestätigt die aktuelle PIN, beendet alle Sitzungen
+  el("pinFormular").addEventListener("submit", async (ereignis) => {
+    ereignis.preventDefault();
+    try {
+      await api("/api/me/pin", {
+        method: "POST",
+        body: JSON.stringify({ alte_pin: el("pinAlt").value, neue_pin: el("pinNeu").value }),
+      });
+      // Felder sofort leeren — die neue PIN soll nicht im DOM stehen bleiben
+      ereignis.target.reset();
+      toast("PIN geändert — bitte neu anmelden ✓");
+      setTimeout(() => zeigeLogin(), 1200);
+    } catch (fehler) {
+      fehlerAnzeigen(fehler);
+    }
+  });
   el("logoutKnopf").addEventListener("click", async () => {
     try {
       await api("/api/logout", { method: "POST" });
@@ -3832,6 +3963,8 @@ function kontoRendern() {
 async function appStarten(zielAnsicht = "heute") {
   kontoRendern();
   el("adminBereich").hidden = zustand.nutzer.rolle !== "admin";
+  el("mehrTabs").querySelector('[data-mehr-tab="admin"]').hidden =
+    zustand.nutzer.rolle !== "admin";
   await spieleLaden();
   zeigeAnsicht(zielAnsicht);
   liveVerbinden();

@@ -41,6 +41,13 @@ class NameAenderung(BaseModel):
     anzeigename: str = Field(min_length=1, max_length=50)
 
 
+class PinWechsel(BaseModel):
+    """Selbst-Service: aktuelle PIN bestätigen, neue setzen (mind. 6 Zeichen)."""
+
+    alte_pin: str = Field(min_length=4, max_length=32)
+    neue_pin: str = Field(min_length=PIN_MIN_NEU, max_length=32)
+
+
 class NeuerNutzer(BaseModel):
     anzeigename: str = Field(min_length=1, max_length=50)
     pin: str = Field(min_length=PIN_MIN_NEU, max_length=32)

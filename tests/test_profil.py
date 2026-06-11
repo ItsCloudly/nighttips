@@ -34,6 +34,43 @@ def _png(breite=600, hoehe=400, farbe=(200, 30, 30)) -> bytes:
     return puffer.getvalue()
 
 
+def test_pin_wechseln(client, conn, nutzerpaar):
+    _als(client, "Mia")
+    # Falsche aktuelle PIN → 403, nichts passiert
+    antwort = client.post("/api/me/pin", json={"alte_pin": "999999", "neue_pin": "neuespin7"})
+    assert antwort.status_code == 403
+    assert client.get("/api/me").status_code == 200  # Sitzung lebt noch
+
+    # Zu kurze neue PIN scheitert an der Validierung
+    assert (
+        client.post("/api/me/pin", json={"alte_pin": "123456", "neue_pin": "kurz"}).status_code
+        == 422
+    )
+
+    # Erfolgreicher Wechsel: alle Sitzungen enden, Login nur noch mit neuer PIN
+    antwort = client.post("/api/me/pin", json={"alte_pin": "123456", "neue_pin": "neuespin7"})
+    assert antwort.status_code == 200
+    assert client.get("/api/me").status_code == 401
+    assert (
+        client.post("/api/login", json={"anzeigename": "Mia", "pin": "123456"}).status_code == 401
+    )
+    _als(client, "Mia", pin="neuespin7")
+    # Protokolliert ohne Klartext
+    eintrag = conn.execute(
+        "SELECT alt_wert, neu_wert FROM change_log WHERE feld = 'pin_hash'"
+        " ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    assert (eintrag["alt_wert"], eintrag["neu_wert"]) == ("(geheim)", "(geheim)")
+
+
+def test_pin_wechsel_rate_limit(client, conn, nutzerpaar):
+    _als(client, "Mia")
+    for _ in range(5):
+        client.post("/api/me/pin", json={"alte_pin": "999999", "neue_pin": "neuespin7"})
+    antwort = client.post("/api/me/pin", json={"alte_pin": "123456", "neue_pin": "neuespin7"})
+    assert antwort.status_code == 429
+
+
 def test_profilbild_hochladen_und_abrufen(client, conn, nutzerpaar):
     _als(client, "Mia")
     antwort = client.put("/api/me/profilbild", content=_png())
