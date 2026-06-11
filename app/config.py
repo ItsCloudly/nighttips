@@ -42,6 +42,16 @@ def _int(name: str, standard: int) -> int:
         return standard
 
 
+def _float(name: str, standard: float) -> float:
+    wert = os.environ.get(name)
+    if wert is None or wert.strip() == "":
+        return standard
+    try:
+        return float(wert.strip().replace(",", "."))
+    except ValueError:
+        return standard
+
+
 @dataclass(frozen=True)
 class Einstellungen:
     db_pfad: Path
@@ -55,6 +65,12 @@ class Einstellungen:
     api_wettbewerb: str
     sync_intervall_minuten: int
     ko_wertung_nach_120: bool
+    # Erlaubte API-Calls/Minute des football-data-Tarifs (Free 10, Livescores 20)
+    # — daraus leitet der Client seinen Mindestabstand ab.
+    api_rate_pro_minute: int = 10
+    # Poll-Takt in Sekunden, während ein Spiel läuft (ein Call deckt alle
+    # Parallelspiele ab; bewusst unter dem Tarif-Limit halten).
+    live_poll_sekunden: float = 7.5
     # Web Push (SPEC 5.5): VAPID-Schlüsselpaar; leer = Push deaktiviert.
     vapid_private_key: str = ""
     vapid_public_key: str = ""
@@ -95,6 +111,8 @@ def lade_einstellungen() -> Einstellungen:
         api_wettbewerb=os.environ.get("WM26_API_WETTBEWERB", "WC"),
         sync_intervall_minuten=_int("WM26_SYNC_INTERVALL_MINUTEN", 60),
         ko_wertung_nach_120=os.environ.get("WM26_KO_WERTUNG", "120").strip() != "90",
+        api_rate_pro_minute=_int("WM26_API_RATE_PRO_MINUTE", 10),
+        live_poll_sekunden=_float("WM26_LIVE_POLL_SEKUNDEN", 7.5),
         vapid_private_key=os.environ.get("WM26_VAPID_PRIVATE_KEY", ""),
         vapid_public_key=os.environ.get("WM26_VAPID_PUBLIC_KEY", ""),
         vapid_subject=os.environ.get("WM26_VAPID_SUBJECT", "mailto:admin@example.invalid"),

@@ -63,8 +63,6 @@ POSITION_MAP = {
     "right winger": "Sturm",
 }
 
-# Drosselung: Free Tier erlaubt 10 Anfragen/Minute.
-_MIN_ABSTAND_SEKUNDEN = 6.5
 _MAX_VERSUCHE = 3
 
 
@@ -94,9 +92,13 @@ class FussballApi:
         self._wettbewerb = einstellungen.api_wettbewerb
         self._headers = {"X-Auth-Token": einstellungen.api_token}
         self._letzter_abruf = 0.0
+        # Mindestabstand aus dem Tarif-Limit ableiten (8 % Puffer gegen
+        # Uhren-Drift; Free 10/Min. → 6,48 s, Livescores 20/Min. → 3,24 s).
+        rate = max(einstellungen.api_rate_pro_minute, 1)
+        self._min_abstand = 60.0 / rate * 1.08
 
     def _drosseln(self) -> None:
-        wartezeit = self._letzter_abruf + _MIN_ABSTAND_SEKUNDEN - time.monotonic()
+        wartezeit = self._letzter_abruf + self._min_abstand - time.monotonic()
         if wartezeit > 0:
             time.sleep(wartezeit)
 

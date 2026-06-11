@@ -56,7 +56,15 @@ def test_phase_haengengebliebenes_spiel_faellt_zurueck(tmp_path):
     assert scheduler._poll_phase(conn) == "normal"
 
 
-def test_live_intervall_unter_dem_api_limit():
-    """~8 Abrufe/Minute, nie unter dem 6,5-s-Mindestabstand des API-Clients."""
-    assert 6.5 <= scheduler._LIVE_INTERVALL_SEKUNDEN <= 60
-    assert 60 / scheduler._LIVE_INTERVALL_SEKUNDEN <= 9
+def test_drosselung_folgt_dem_tarif(einstellungen):
+    """Der API-Mindestabstand leitet sich aus dem konfigurierten Limit ab."""
+    import dataclasses
+
+    from app.services.fussball_api import FussballApi
+
+    frei = dataclasses.replace(einstellungen, api_token="t")  # Standard: 10/Min.
+    assert 6.0 <= FussballApi(frei)._min_abstand <= 6.6
+    livescores = dataclasses.replace(einstellungen, api_token="t", api_rate_pro_minute=20)
+    assert 3.0 <= FussballApi(livescores)._min_abstand <= 3.3
+    # Standard-Live-Poll bleibt deutlich unter dem Limit
+    assert einstellungen.live_poll_sekunden >= 60 / einstellungen.api_rate_pro_minute

@@ -27,9 +27,6 @@ logger = logging.getLogger("wm26.scheduler")
 
 _STAMMDATEN_ABSTAND = timedelta(hours=20)
 _VORLAUF_INTERVALL_SEKUNDEN = 60
-# Während ein Spiel läuft: ~8 Abrufe/Minute (Tore kommen binnen Sekunden an);
-# der 6,5-s-Mindestabstand des API-Clients bleibt die harte Untergrenze.
-_LIVE_INTERVALL_SEKUNDEN = 7.5
 _VORLAUF_MINUTEN = 75
 # Sicherheitsnetz: hängt ein Spiel im Status live fest (API-Aussetzer),
 # fällt der Poll nach dieser Zeit auf das normale Intervall zurück.
@@ -127,7 +124,9 @@ def _sync_lauf(einstellungen: Einstellungen) -> str:
 async def sync_schleife(einstellungen: Einstellungen, stop_ereignis: asyncio.Event) -> None:
     normal_intervall = einstellungen.sync_intervall_minuten * 60
     intervalle = {
-        "live": _LIVE_INTERVALL_SEKUNDEN,
+        # Läuft ein Spiel: Takt aus der Konfiguration (WM26_LIVE_POLL_SEKUNDEN);
+        # der Mindestabstand des API-Clients bleibt die harte Untergrenze.
+        "live": max(einstellungen.live_poll_sekunden, 1.0),
         "vorlauf": _VORLAUF_INTERVALL_SEKUNDEN,
         "normal": normal_intervall,
     }
