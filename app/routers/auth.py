@@ -21,7 +21,7 @@ router = APIRouter(prefix="/api", tags=["auth"])
 
 
 def _client_ip(request: Request) -> str:
-    # uvicorn läuft mit --proxy-headers hinter Tailscale Funnel (siehe OPERATIONS.md),
+    # uvicorn läuft mit --proxy-headers hinter dem HTTPS-Proxy (siehe docs/BETRIEB.md),
     # request.client enthält dann bereits die echte Client-Adresse.
     return request.client.host if request.client else "unbekannt"
 

@@ -37,7 +37,7 @@ python -m venv .venv
 pip install -r requirements.txt
 cp .env.example .env            # ausfüllen, Kommentare in der Datei helfen
 python -m app.cli init-db
-python -m app.cli nutzer-anlegen --name Admin --rolle admin
+python -m app.cli nutzer-anlegen --name Admin --rolle admin   # fragt die PIN ab; alternativ --pin …
 python -m app.cli import-spielplan beispiel/spielplan-beispiel.json
 uvicorn app.main:app --port 8026
 ```
@@ -82,6 +82,11 @@ tests/               pytest-Suite
 ```bash
 python -m pytest tests -q
 ```
+
+## API-Notizen
+
+Eine interaktive API-Übersicht liefert FastAPI unter `/docs`. Der Login
+erwartet z. B. `POST /api/login` mit `{"anzeigename": "…", "pin": "…"}`.
 
 ## Mitgeliefertes
 
