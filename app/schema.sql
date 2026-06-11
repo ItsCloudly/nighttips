@@ -151,7 +151,11 @@ CREATE TABLE IF NOT EXISTS nutzer (
     erstellt_utc TEXT NOT NULL,
     -- KI-Prognosen/-Analysen sichtbar? Admin/KI sehen sie immer; Mitglieder
     -- nur nach Freischaltung durch den Admin. (Bestands-DBs: Migration in db.py)
-    ki_freigeschaltet INTEGER NOT NULL DEFAULT 0
+    ki_freigeschaltet INTEGER NOT NULL DEFAULT 0,
+    -- Taucht das Konto in Wertungs-Ansichten auf (Rangliste, Podium, Top-Tipper)?
+    -- 0 z. B. für Test-/Dev-Konten; Tipplisten zeigen sie weiterhin. Nur der
+    -- Admin schaltet um. (Bestands-DBs: Migration in db.py)
+    rangliste_sichtbar INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS tipp (

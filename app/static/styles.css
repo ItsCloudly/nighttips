@@ -547,7 +547,13 @@ input.tipp-eingabe:focus {
   color: var(--ink-2);
 }
 
-.fuss-knoepfe { display: flex; gap: 8px; margin-left: auto; }
+.fuss-knoepfe {
+  display: flex;
+  flex-wrap: wrap; /* 3+ Knöpfe je Zeile (Nutzerverwaltung) müssen auf 375 px umbrechen */
+  justify-content: flex-end;
+  gap: 6px 8px;
+  margin-left: auto;
+}
 
 .punkte-chip {
   background: var(--akzent);
@@ -1055,12 +1061,61 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 }
 .podium-detail { font-size: 0.75rem; color: var(--ink-2); }
 
-.rang-zeile {
-  display: grid;
-  grid-template-columns: 40px 1fr auto;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
+/* Rangliste als Tabelle: Spalten-Labels stehen genau einmal im Kopf,
+   Tendenz-Spalte (.nur-breit) erst ab 720 px. */
+.rang-tabelle-karte { padding: 6px 12px 10px; }
+
+.rang-tabelle {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.rang-tabelle th {
+  font-family: var(--ns-mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-align: left;
+  padding: 8px 4px 6px;
+  border-bottom: 1px solid var(--linie);
+  white-space: nowrap;
+}
+
+.rang-tabelle td {
+  padding: 9px 4px;
+  border-bottom: 1px solid var(--linie);
+  vertical-align: middle;
+}
+
+.rang-tabelle tbody tr:last-child td { border-bottom: 0; }
+
+.rang-tabelle .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.rang-tabelle .rang-name {
+  width: 100%;
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rang-tabelle .rang-platz { font-size: 1rem; }
+.rang-tabelle .rang-punkte { font-size: 1.05rem; }
+.rang-tabelle .rang-form { padding-left: 8px; }
+
+.rang-fussnote {
+  margin: 8px 2px 2px;
+  font-size: 0.7rem;
+  color: var(--ink-2);
+}
+
+.nur-breit { display: none; }
+@media (min-width: 720px) {
+  .nur-breit { display: table-cell; }
 }
 
 .rang-platz {
@@ -1469,6 +1524,12 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 
 .bonus-karte .frage { font-weight: 700; font-size: 1.05rem; }
 .bonus-schluss { font-size: 0.8rem; color: var(--ink-2); margin: 2px 0 10px; }
+.bonus-countdown {
+  font-family: var(--ns-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--akzent);
+}
 .bonus-antwort { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .bonus-antwort select, .bonus-antwort input { flex: 1; min-width: 160px; }
 
@@ -1520,15 +1581,17 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 .wettbewerb-chip {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   border-radius: 999px;
-  padding: 7px 14px;
+  padding: 7px 12px;
   min-height: 38px;
   font-size: 0.85rem;
   font-weight: 700;
   white-space: nowrap;
   background: var(--karte);
 }
+
+.wettbewerb-chip svg { width: 19px; height: 19px; flex-shrink: 0; }
 
 .wettbewerb-chip::after {
   content: "";
@@ -1575,7 +1638,9 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
   background: var(--ns-aurora);
 }
 
-.wb-logo.bl { background: linear-gradient(140deg, #d3010c, #7a0008); }
+.wb-logo svg { width: 24px; height: 24px; }
+
+.wb-logo.bl { background: linear-gradient(140deg, #d3010c, #7a0008); color: #fff; }
 
 .wb-name { font-weight: 700; }
 .wb-detail { font-size: 0.8rem; color: var(--ink-2); }
@@ -1617,7 +1682,16 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.gruppe-fuss { font-size: 0.7rem; color: var(--ink-2); text-align: right; margin-top: 6px; }
+/* Spalten-Legende über der Tabelle (rechtsbündig über den Werten),
+   Quali-Info darunter — passend zu den farbigen Zonen-Strichen links. */
+.gruppe-legende {
+  font-family: var(--ns-mono);
+  font-size: 0.7rem;
+  color: var(--ink-2);
+  text-align: right;
+  margin-bottom: 2px;
+}
+.gruppe-fuss { font-size: 0.7rem; color: var(--ink-2); text-align: left; margin-top: 8px; }
 
 .baum-hinweis { margin: 0 2px 8px; }
 
@@ -2135,14 +2209,6 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
   align-items: end;
   gap: 10px;
   width: 100%;
-}
-
-/* Kleine Formkette in der Ranglistenzeile */
-.rang-seite {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
 }
 
 .formkette.klein .form-punkt {

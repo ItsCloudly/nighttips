@@ -1333,7 +1333,9 @@ function panelStatistikHtml(detail, phase) {
   const teile = [];
   if (phase === "nach") {
     const gewertet = detail.tipps
-      .filter((tipp) => tipp.punkte !== null && tipp.punkte > 0)
+      // Versteckte Konten (rangliste_sichtbar=0) tauchen in Wertungs-Ansichten
+      // nicht auf — in der Tippliste selbst bleiben sie sichtbar.
+      .filter((tipp) => tipp.punkte !== null && tipp.punkte > 0 && tipp.rangliste_sichtbar !== 0)
       .sort((a, b) => b.punkte - a.punkte)
       .slice(0, 3);
     if (gewertet.length) {
@@ -1791,8 +1793,10 @@ function gruppenGitterHtml(tabellen) {
         })
         .join("");
       return `<div class="karte gruppe-karte">
-        <h3>Gruppe ${escapeHtml(gruppe)}</h3>${zeilen}
-        <div class="gruppe-fuss">Platz 1–2 direkt weiter · Platz 3 mögl. · Sp. · Diff. · Pkt.</div>
+        <h3>Gruppe ${escapeHtml(gruppe)}</h3>
+        <div class="gruppe-legende" aria-hidden="true">Sp. · Diff. · Pkt.</div>
+        ${zeilen}
+        <div class="gruppe-fuss">Platz 1–2 direkt weiter · Platz 3 möglich (beste Dritte)</div>
       </div>`;
     })
     .join("")}</div>`;
@@ -2097,21 +2101,43 @@ async function ranglisteLaden() {
           .join("") +
         `</div>`;
     }
-    liste.innerHTML = eintraege
+    // Eine Tabelle statt Einzelkarten: die Spalten-Labels stehen genau einmal
+    // im Kopf. Tendenz erst ab 720 px (.nur-breit), sonst wird 375 px zu eng.
+    const mitBonus = eintraege.some((eintrag) => eintrag.bonus_punkte > 0);
+    const zeilen = eintraege
       .map((eintrag) => {
         const ki = eintrag.rolle === "ki" ? '<span class="ki">KI</span>' : "";
-        const bonus = eintrag.bonus_punkte ? ` · +${eintrag.bonus_punkte} Bonus` : "";
-        return `<div class="karte rang-zeile">
-          <span class="rang-platz">${eintrag.platz}</span>
-          <span>
-            <span class="rang-name">${escapeHtml(eintrag.anzeigename)}${ki}</span><br>
-            <span class="rang-detail">${eintrag.tipps_gewertet} Tipps · ${eintrag.exakt}× exakt · ${eintrag.differenz}× Differenz · ${eintrag.tendenz}× Tendenz${bonus}</span>
-          </span>
-          <span class="rang-seite">${tipperFormkette(eintrag.form)}
-            <span class="rang-punkte">${eintrag.punkte}</span></span>
-        </div>`;
+        const bonus = eintrag.bonus_punkte ? ` title="inkl. +${eintrag.bonus_punkte} Bonus"` : "";
+        return `<tr>
+          <td class="num rang-platz">${eintrag.platz}</td>
+          <td class="rang-name">${escapeHtml(eintrag.anzeigename)}${ki}</td>
+          <td class="num">${eintrag.tipps_gewertet}</td>
+          <td class="num">${eintrag.exakt}</td>
+          <td class="num">${eintrag.differenz}</td>
+          <td class="num nur-breit">${eintrag.tendenz}</td>
+          <td class="rang-form">${tipperFormkette(eintrag.form)}</td>
+          <td class="num rang-punkte"${bonus}>${eintrag.punkte}</td>
+        </tr>`;
       })
       .join("");
+    liste.innerHTML = `<div class="karte rang-tabelle-karte">
+      <table class="rang-tabelle">
+        <thead><tr>
+          <th class="num" aria-label="Platz">#</th>
+          <th>Tipper</th>
+          <th class="num" title="Gewertete Tipps">Sp</th>
+          <th class="num" title="Exakte Ergebnisse">4er</th>
+          <th class="num" title="Richtige Tordifferenz">3er</th>
+          <th class="num nur-breit" title="Richtige Tendenz">2er</th>
+          <th>Form</th>
+          <th class="num">Pkt</th>
+        </tr></thead>
+        <tbody>${zeilen}</tbody>
+      </table>
+      <p class="rang-fussnote">Sp = gewertete Tipps · 4er = exakt · 3er = Differenz · 2er = Tendenz${
+        mitBonus ? " · Pkt inkl. Bonuspunkte" : ""
+      }</p>
+    </div>`;
   }
   await bonusfragenLaden().catch(fehlerAnzeigen);
 }
@@ -2153,11 +2179,14 @@ async function bonusfragenLaden() {
   el("bonusListe").innerHTML = fragen
     .map((frage) => {
       const schluss = `${lokalerTag(frage.einsendeschluss_utc)}, ${lokaleUhrzeit(frage.einsendeschluss_utc)} Uhr`;
+      const countdown = `<span class="bonus-countdown" data-bonus-schluss="${frage.einsendeschluss_utc}">${countdownText(
+        new Date(frage.einsendeschluss_utc) - new Date()
+      )}</span>`;
       const teile = [
         `<div class="karte bonus-karte" data-bonus="${frage.id}">
         <div class="frage">${escapeHtml(frage.frage)}
           <span class="punkte-chip">${frage.punkte_wert} P.</span></div>
-        <p class="bonus-schluss">${frage.offen ? `Einsendeschluss: ${schluss}` : frage.aufloesung_name ? `Auflösung: <strong>${escapeHtml(frage.aufloesung_name)}</strong>` : "Einsendeschluss vorbei — Auflösung folgt."}</p>`,
+        <p class="bonus-schluss">${frage.offen ? `Einsendeschluss: ${schluss} · noch ${countdown}` : frage.aufloesung_name ? `Auflösung: <strong>${escapeHtml(frage.aufloesung_name)}</strong>` : "Einsendeschluss vorbei — Auflösung folgt."}</p>`,
       ];
       if (frage.offen) {
         teile.push(`<div class="bonus-antwort">${bonusAntwortFeld(frage)}
@@ -2180,6 +2209,33 @@ async function bonusfragenLaden() {
       return teile.join("");
     })
     .join("");
+  bonusCountdownStarten();
+}
+
+/* Tickender Einsendeschluss-Timer auf den offenen Bonus-Karten; läuft eine
+   Frist ab, lädt die Liste neu (Eingabe verschwindet, Sperre greift sichtbar). */
+let bonusCountdownTimer = null;
+
+function bonusCountdownStarten() {
+  clearInterval(bonusCountdownTimer);
+  if (!el("bonusListe").querySelector("[data-bonus-schluss]")) return;
+  bonusCountdownTimer = setInterval(() => {
+    const felder = el("bonusListe").querySelectorAll("[data-bonus-schluss]");
+    if (!felder.length) {
+      clearInterval(bonusCountdownTimer);
+      return;
+    }
+    let abgelaufen = false;
+    for (const feld of felder) {
+      const rest = new Date(feld.dataset.bonusSchluss) - new Date();
+      feld.textContent = countdownText(rest);
+      if (rest <= 0) abgelaufen = true;
+    }
+    if (abgelaufen) {
+      clearInterval(bonusCountdownTimer);
+      bonusfragenLaden().catch(fehlerAnzeigen);
+    }
+  }, 1000);
 }
 
 function bonusEreignisse() {
@@ -2322,6 +2378,17 @@ async function pushUmschalten() {
 
 /* ---------- Wettbewerbs-/Saison-Auswahl ---------- */
 
+/* Wettbewerbs-Icons (Strichstil wie die Tab-Bar): Pokal für die WM,
+   Ball für die Bundesliga. */
+const WETTBEWERB_ICONS = {
+  WC: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v3a4 4 0 0 1-4 4h-4A4 4 0 0 1 6 7Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 5H4a2 2 0 0 0 2 4M18 5h2a2 2 0 0 1-2 4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v4m-3 5h6m-3-5v5" stroke="currentColor" stroke-width="1.8"/></svg>',
+  BL1: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.2 16.4 10.4 14.7 15.6H9.3L7.6 10.4Z" fill="currentColor"/></svg>',
+};
+
+function wettbewerbIcon(code) {
+  return WETTBEWERB_ICONS[code] ?? WETTBEWERB_ICONS.WC;
+}
+
 async function wettbewerbeLaden() {
   try {
     zustand.wettbewerbe = await api("/api/wettbewerbe");
@@ -2334,7 +2401,9 @@ async function wettbewerbeLaden() {
     knopf.hidden = true;
     return;
   }
-  knopf.textContent = `${aktiv.name} ${aktiv.saison}`;
+  // Icon statt Textliste: Pokal + Saison, der volle Name wandert ins aria-label.
+  knopf.innerHTML = `${wettbewerbIcon(aktiv.code)}<span>${escapeHtml(aktiv.saison)}</span>`;
+  knopf.setAttribute("aria-label", `Wettbewerb wählen — aktiv: ${aktiv.name} ${aktiv.saison}`);
   knopf.hidden = false;
 }
 
@@ -2347,13 +2416,12 @@ function wettbewerbsWahlOeffnen() {
     '<div class="wb-liste" style="margin-top:14px">',
   ];
   for (const wettbewerb of zustand.wettbewerbe) {
-    const kuerzel = wettbewerb.code === "WC" ? "WM" : wettbewerb.code === "BL1" ? "BL" : wettbewerb.code.slice(0, 2);
     const badge = wettbewerb.aktiv
       ? '<span class="badge" style="background:var(--akzent);color:var(--akzent-ink);border-color:transparent">Aktiv</span>'
       : `<span class="badge">${escapeHtml(wettbewerb.hinweis ?? "Bald")}</span>`;
     teile.push(`<button class="wb-eintrag ${wettbewerb.aktiv ? "aktuell" : "bald"}"
         data-wettbewerb="${escapeHtml(wettbewerb.code)}"${wettbewerb.aktiv ? "" : ' aria-disabled="true"'}>
-      <span class="wb-logo${wettbewerb.code === "BL1" ? " bl" : ""}">${escapeHtml(kuerzel)}</span>
+      <span class="wb-logo${wettbewerb.code === "BL1" ? " bl" : ""}">${wettbewerbIcon(wettbewerb.code)}</span>
       <span style="min-width:0">
         <span class="wb-name">${escapeHtml(wettbewerb.name)} ${escapeHtml(wettbewerb.saison)}</span><br>
         <span class="wb-detail">${escapeHtml(wettbewerb.beschreibung ?? "")}</span>
@@ -2521,12 +2589,16 @@ async function nutzerLaden() {
             : `<button class="klein${person.ki_freigeschaltet ? "" : " gefahr"}"
                  data-nutzer-ki="${person.id}" data-ki-neu="${person.ki_freigeschaltet ? 0 : 1}">
                  KI-Wertung: ${person.ki_freigeschaltet ? "an" : "aus"}</button>`;
+          const sichtbarKnopf = `<button class="klein${person.rangliste_sichtbar ? "" : " gefahr"}"
+                 data-nutzer-sichtbar="${person.id}" data-sichtbar-neu="${person.rangliste_sichtbar ? 0 : 1}">
+                 Rangliste: ${person.rangliste_sichtbar ? "an" : "aus"}</button>`;
           return `<div class="verwaltungszeile">
             <span>${escapeHtml(person.anzeigename)}<span class="rollen-chip ${person.rolle}">${person.rolle}</span>${
               ich ? ' <span class="neben">(du)</span>' : ""
             }</span>
             <span class="fuss-knoepfe">
               ${kiKnopf}
+              ${sichtbarKnopf}
               <button class="klein" data-nutzer-pin="${person.id}"
                 data-nutzer-name="${escapeHtml(person.anzeigename)}">PIN</button>
               ${
@@ -2761,6 +2833,7 @@ function mehrEreignisse() {
   });
   el("nutzerListe").addEventListener("click", async (ereignis) => {
     const kiKnopf = ereignis.target.closest("[data-nutzer-ki]");
+    const sichtbarKnopf = ereignis.target.closest("[data-nutzer-sichtbar]");
     const pinResetKnopf = ereignis.target.closest("[data-nutzer-pin]");
     const loeschKnopf = ereignis.target.closest("[data-nutzer-loeschen]");
     try {
@@ -2770,6 +2843,17 @@ function mehrEreignisse() {
           body: JSON.stringify({ ki_freigeschaltet: kiKnopf.dataset.kiNeu === "1" }),
         });
         toast(kiKnopf.dataset.kiNeu === "1" ? "KI-Wertung freigeschaltet ✓" : "KI-Wertung entzogen");
+        await nutzerLaden();
+      } else if (sichtbarKnopf) {
+        await api(`/api/admin/nutzer/${sichtbarKnopf.dataset.nutzerSichtbar}`, {
+          method: "PATCH",
+          body: JSON.stringify({ rangliste_sichtbar: sichtbarKnopf.dataset.sichtbarNeu === "1" }),
+        });
+        toast(
+          sichtbarKnopf.dataset.sichtbarNeu === "1"
+            ? "Konto zählt wieder in der Rangliste ✓"
+            : "Konto aus Rangliste & Co. ausgeblendet"
+        );
         await nutzerLaden();
       } else if (pinResetKnopf) {
         const neuePin = prompt(

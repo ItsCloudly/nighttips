@@ -67,15 +67,21 @@ def test_migration_ergaenzt_spalte_ohne_datenverlust(tmp_path):
     conn = db.verbinden(pfad)
     db.schema_anlegen(conn)
     bestand = _bestand_anlegen(conn)
-    # Alt-Stand nachstellen: Spalte aus einer früheren Version entfernen
+    # Alt-Stand nachstellen: Spalten aus früheren Versionen entfernen
     conn.execute("ALTER TABLE nutzer DROP COLUMN ki_freigeschaltet")
+    conn.execute("ALTER TABLE nutzer DROP COLUMN rangliste_sichtbar")
     conn.commit()
     conn.close()
 
     conn = db.verbinden(pfad)
     db.schema_anlegen(conn)
     spalten = {zeile["name"] for zeile in conn.execute("PRAGMA table_info(nutzer)")}
-    assert "ki_freigeschaltet" in spalten
+    assert {"ki_freigeschaltet", "rangliste_sichtbar"} <= spalten
+    # Bestandskonten bleiben nach der Migration in der Rangliste sichtbar
+    sichtbar = conn.execute(
+        "SELECT rangliste_sichtbar FROM nutzer WHERE id = ?", (bestand["nutzer_id"],)
+    ).fetchone()["rangliste_sichtbar"]
+    assert sichtbar == 1
     _bestand_pruefen(conn, bestand)
     conn.close()
 

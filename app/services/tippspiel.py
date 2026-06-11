@@ -162,7 +162,8 @@ def rangliste(
     Es zählen nur gewertete Tipps; Nutzer ohne gewertete Tipps im gewählten
     Zeitraum erscheinen mit 0 Punkten, damit alle Mitspieler sichtbar bleiben.
     KI-Gate: mit_ki=False blendet den KI-Tipper komplett aus — die Plätze
-    werden dann ohne ihn durchgezählt.
+    werden dann ohne ihn durchgezählt. Konten mit rangliste_sichtbar=0
+    (z. B. Test-Konten) fehlen für alle, ebenfalls mit aufgerückten Plätzen.
     """
     bedingungen = ["t.punkte IS NOT NULL"]
     parameter: list[str] = []
@@ -174,7 +175,7 @@ def rangliste(
         parameter.append(runde)
     # Bonuspunkte zählen nur in der Gesamtwertung (sie gehören zu keinem Spieltag).
     mit_bonus = datum is None and runde is None
-    ki_filter = "" if mit_ki else " WHERE n.rolle != 'ki'"
+    ki_filter = " WHERE n.rangliste_sichtbar = 1" + ("" if mit_ki else " AND n.rolle != 'ki'")
     zeilen = conn.execute(
         f"""
         SELECT n.id, n.anzeigename, n.rolle,

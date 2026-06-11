@@ -56,15 +56,23 @@ def nutzer_liste(
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
 ) -> list[dict[str, Any]]:
     zeilen = conn.execute(
-        "SELECT id, anzeigename, rolle, ki_freigeschaltet, erstellt_utc FROM nutzer"
-        " ORDER BY anzeigename COLLATE NOCASE"
+        "SELECT id, anzeigename, rolle, ki_freigeschaltet, rangliste_sichtbar, erstellt_utc"
+        " FROM nutzer ORDER BY anzeigename COLLATE NOCASE"
     ).fetchall()
     # bool statt SQLite-0/1, konsistent mit /api/me und /api/login
-    return [{**dict(zeile), "ki_freigeschaltet": bool(zeile["ki_freigeschaltet"])} for zeile in zeilen]
+    return [
+        {
+            **dict(zeile),
+            "ki_freigeschaltet": bool(zeile["ki_freigeschaltet"]),
+            "rangliste_sichtbar": bool(zeile["rangliste_sichtbar"]),
+        }
+        for zeile in zeilen
+    ]
 
 
 class NutzerAenderung(BaseModel):
     ki_freigeschaltet: bool | None = None
+    rangliste_sichtbar: bool | None = None
     pin: str | None = Field(default=None, min_length=PIN_MIN_NEU, max_length=32)
 
 
@@ -75,7 +83,7 @@ def nutzer_aendern(
     admin: Annotated[sqlite3.Row, Depends(admin_nutzer)],
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
 ) -> dict[str, Any]:
-    """KI-Wertung freischalten/entziehen und/oder PIN zurücksetzen."""
+    """KI-Wertung/Ranglisten-Sichtbarkeit umschalten und/oder PIN zurücksetzen."""
     if daten.pin is not None:
         try:
             nutzer_service.pin_validieren(daten.pin)
@@ -84,11 +92,31 @@ def nutzer_aendern(
     jetzt = jetzt_iso()
     with db.schreib_transaktion(conn):
         ziel = conn.execute(
-            "SELECT id, anzeigename, rolle, ki_freigeschaltet FROM nutzer WHERE id = ?",
+            "SELECT id, anzeigename, rolle, ki_freigeschaltet, rangliste_sichtbar"
+            " FROM nutzer WHERE id = ?",
             (nutzer_id,),
         ).fetchone()
         if ziel is None:
             raise HTTPException(status_code=404, detail="Nutzer nicht gefunden")
+        if (
+            daten.rangliste_sichtbar is not None
+            and bool(ziel["rangliste_sichtbar"]) != daten.rangliste_sichtbar
+        ):
+            conn.execute(
+                "UPDATE nutzer SET rangliste_sichtbar = ? WHERE id = ?",
+                (1 if daten.rangliste_sichtbar else 0, nutzer_id),
+            )
+            db.change_log_eintrag(
+                conn,
+                entitaet="nutzer",
+                entitaet_id=nutzer_id,
+                feld="rangliste_sichtbar",
+                alt_wert=ziel["rangliste_sichtbar"],
+                neu_wert=1 if daten.rangliste_sichtbar else 0,
+                quelle="admin",
+                akteur=admin["anzeigename"],
+                zeitpunkt_utc=jetzt,
+            )
         if daten.ki_freigeschaltet is not None and bool(ziel["ki_freigeschaltet"]) != daten.ki_freigeschaltet:
             conn.execute(
                 "UPDATE nutzer SET ki_freigeschaltet = ? WHERE id = ?",
@@ -127,10 +155,15 @@ def nutzer_aendern(
         # Innerhalb der Transaktion lesen — sonst kann eine parallele Löschung
         # zwischen Commit und SELECT die Antwort aushebeln.
         zeile = conn.execute(
-            "SELECT id, anzeigename, rolle, ki_freigeschaltet FROM nutzer WHERE id = ?",
+            "SELECT id, anzeigename, rolle, ki_freigeschaltet, rangliste_sichtbar"
+            " FROM nutzer WHERE id = ?",
             (nutzer_id,),
         ).fetchone()
-    return {**dict(zeile), "ki_freigeschaltet": bool(zeile["ki_freigeschaltet"])}
+    return {
+        **dict(zeile),
+        "ki_freigeschaltet": bool(zeile["ki_freigeschaltet"]),
+        "rangliste_sichtbar": bool(zeile["rangliste_sichtbar"]),
+    }
 
 
 @router.delete("/nutzer/{nutzer_id}", status_code=204)

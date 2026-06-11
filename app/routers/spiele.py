@@ -117,7 +117,7 @@ def spiel_detail(
     zeige_ki = ki_sichtbar(nutzer)
     sql = (
         "SELECT t.tipp_heim, t.tipp_gast, t.punkte, n.id AS nutzer_id,"
-        " n.anzeigename, n.rolle"
+        " n.anzeigename, n.rolle, n.rangliste_sichtbar"
         " FROM tipp t JOIN nutzer n ON n.id = t.nutzer_id WHERE t.spiel_id = ?"
     )
     parameter: list[Any] = [spiel_id]
