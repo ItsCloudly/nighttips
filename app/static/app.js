@@ -303,6 +303,8 @@ function teamFilterKnopfRendern() {
       gewaehlt.name
     )}</span>`;
     knopf.classList.add("aktiv");
+    knopf.setAttribute("aria-label", `Nach Team filtern (aktuell: ${gewaehlt.name})`);
+    knopf.setAttribute("title", `Teamfilter: ${gewaehlt.name}`);
     return;
   }
   if (!teamFilterZufall?.length) {
@@ -317,6 +319,8 @@ function teamFilterKnopfRendern() {
     ? teamFilterZufall.map(teamFlaggeHtml).join("")
     : "Teams";
   knopf.classList.remove("aktiv");
+  knopf.setAttribute("aria-label", "Nach Team filtern");
+  knopf.setAttribute("title", "Nach Team filtern");
 }
 
 function teamFilterWahlOeffnen() {
