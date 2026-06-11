@@ -123,10 +123,12 @@ def _sync_lauf(einstellungen: Einstellungen) -> str:
 
 async def sync_schleife(einstellungen: Einstellungen, stop_ereignis: asyncio.Event) -> None:
     normal_intervall = einstellungen.sync_intervall_minuten * 60
+    # Harte Untergrenze: nie schneller ticken, als der Tarif Calls erlaubt —
+    # die Drossel des API-Clients lebt pro Instanz und schützt nicht über
+    # Scheduler-Ticks hinweg (jeder Tick baut einen frischen Client).
+    tarif_abstand = 60.0 / max(einstellungen.api_rate_pro_minute, 1)
     intervalle = {
-        # Läuft ein Spiel: Takt aus der Konfiguration (WM26_LIVE_POLL_SEKUNDEN);
-        # der Mindestabstand des API-Clients bleibt die harte Untergrenze.
-        "live": max(einstellungen.live_poll_sekunden, 1.0),
+        "live": max(einstellungen.live_poll_sekunden, tarif_abstand, 1.0),
         "vorlauf": _VORLAUF_INTERVALL_SEKUNDEN,
         "normal": normal_intervall,
     }

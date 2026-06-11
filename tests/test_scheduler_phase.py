@@ -68,3 +68,29 @@ def test_drosselung_folgt_dem_tarif(einstellungen):
     assert 3.0 <= FussballApi(livescores)._min_abstand <= 3.3
     # Standard-Live-Poll bleibt deutlich unter dem Limit
     assert einstellungen.live_poll_sekunden >= 60 / einstellungen.api_rate_pro_minute
+
+
+def test_live_takt_wird_auf_tarif_geklemmt(einstellungen, monkeypatch):
+    """Ein zu klein konfigurierter Live-Takt darf das Tarif-Limit nie reißen."""
+    import asyncio
+    import dataclasses
+
+    kaputt = dataclasses.replace(
+        einstellungen, live_poll_sekunden=0.5, api_rate_pro_minute=20, sync_intervall_minuten=60
+    )
+    gewartet: list[float] = []
+
+    async def schnelltest():
+        stop = asyncio.Event()
+
+        async def fake_wait_for(aufgabe, timeout):
+            gewartet.append(timeout)
+            stop.set()  # nach dem ersten Tick beenden
+            raise asyncio.TimeoutError
+
+        monkeypatch.setattr(scheduler.asyncio, "wait_for", fake_wait_for)
+        monkeypatch.setattr(scheduler, "_sync_lauf", lambda _einstellungen: "live")
+        await scheduler.sync_schleife(kaputt, stop)
+
+    asyncio.run(schnelltest())
+    assert gewartet and gewartet[0] >= 3.0  # 60/20 = 3 s Untergrenze
