@@ -18,7 +18,7 @@ from datetime import timedelta
 
 from . import db
 from .config import Einstellungen
-from .services import news, push, quoten, sync
+from .services import aufstellungen, news, push, quoten, sync
 from .zeit import iso_utc, jetzt_utc
 
 logger = logging.getLogger("wm26.scheduler")
@@ -93,6 +93,15 @@ def _sync_lauf(einstellungen: Einstellungen) -> bool:
         except Exception:
             # Fehlerdetails stehen in sync_status; Quoten sind nie deploy-kritisch.
             logger.exception("Quoten-Sync fehlgeschlagen")
+        try:
+            # Aufstellungs-Poll (SPEC 4.1): nur wenn ein Spiel im Fenster steht,
+            # höchstens alle 5 Minuten (Drossel über sync_status).
+            if einstellungen.aufstellungen_aktiv and aufstellungen.abruf_faellig(conn):
+                auf_bericht = aufstellungen.aufstellungen_sync(conn, einstellungen)
+                if auf_bericht.geprueft:
+                    logger.info("Sync %s: %s", auf_bericht.job, auf_bericht.zusammenfassung())
+        except Exception:
+            logger.exception("Aufstellungs-Sync fehlgeschlagen")
         live_phase = _live_phase(conn)
         if not live_phase:
             # Ruhige Phasen nutzen: fehlende direkte Vergleiche der nächsten

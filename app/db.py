@@ -47,6 +47,9 @@ def _migrationen(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE nutzer ADD COLUMN rangliste_sichtbar INTEGER NOT NULL DEFAULT 1")
     if "tipp_erinnerung_minuten" not in nutzer_spalten:
         conn.execute("ALTER TABLE nutzer ADD COLUMN tipp_erinnerung_minuten INTEGER")
+    spiel_spalten = {zeile["name"] for zeile in conn.execute("PRAGMA table_info(spiel)")}
+    if "espn_ref" not in spiel_spalten:
+        conn.execute("ALTER TABLE spiel ADD COLUMN espn_ref TEXT")
 
 
 @contextmanager

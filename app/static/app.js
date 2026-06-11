@@ -1701,6 +1701,14 @@ function teamTabHtml(team) {
   if (team.ausgeschieden) chips.push('<span class="badge raus">Ausgeschieden</span>');
   if (chips.length) teile.push(`<div class="team-steckbrief">${chips.join("")}</div>`);
 
+  teile.push(kaderListeHtml(team));
+  return teile.join("");
+}
+
+/* Kompletter Kader als Positions-Liste — geteilt zwischen Spiel-Lupe
+   (Teams-Tab) und Team-Lupe. */
+function kaderListeHtml(team) {
+  const teile = [];
   const verletzt = new Map(
     (team.verletzungen ?? []).map((fall) => [fall.spieler_name, fall.status])
   );
@@ -1888,10 +1896,27 @@ async function teamLupeOeffnen(teamId) {
     teile.push("</section>");
   }
 
-  // Kader auf dem Feld
+  // Feld: übliche Startelf (sobald offizielle Aufstellungen vorliegen),
+  // sonst wie bisher der komplette Kader; darunter immer die Kader-Liste.
   if (team.kader.length) {
+    if (team.startelf) {
+      const basis = team.startelf.spiele_basis;
+      const meta = [
+        team.startelf.formation ? escapeHtml(team.startelf.formation) : null,
+        `aus ${basis} ${basis === 1 ? "Spiel" : "Spielen"}`,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      teile.push(`<section class="lupe-abschnitt"><h3>Übliche Startelf
+        <span class="rang-detail">· ${meta}</span></h3>${feldSvg(team.startelf.spieler)}</section>`);
+    } else {
+      teile.push(`<section class="lupe-abschnitt"><h3>Kader auf dem Feld</h3>
+        <p class="hinweis">Sobald die ersten offiziellen Aufstellungen da sind,
+          steht hier die übliche Startelf.</p>
+        ${feldSvg(team.kader)}</section>`);
+    }
     teile.push(
-      `<section class="lupe-abschnitt"><h3>Kader (${team.kader.length})</h3>${feldSvg(team.kader)}</section>`
+      `<section class="lupe-abschnitt"><h3>Kader (${team.kader.length})</h3>${kaderListeHtml(team)}</section>`
     );
   }
 

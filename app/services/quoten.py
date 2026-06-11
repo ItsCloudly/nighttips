@@ -17,22 +17,9 @@ from .. import db
 from ..config import Einstellungen
 from ..zeit import iso_utc, jetzt_iso, jetzt_utc
 from . import sync
-from .laender import deutscher_teamname
+from .laender import deutscher_name_extern
 
 JOB_QUOTEN = "quoten"
-
-# The Odds API benennt manche Teams anders als football-data.org —
-# direkte Zuordnung auf unsere deutschen Teamnamen.
-ALIAS_DE = {
-    "Bosnia and Herzegovina": "Bosnien-Herzegowina",
-    "Cape Verde": "Kap Verde",
-    "Curacao": "Curaçao",
-    "Czech Republic": "Tschechien",
-    "DR Congo": "DR Kongo",
-    "Korea Republic": "Südkorea",
-    "Türkiye": "Türkei",
-    "USA": "USA",
-}
 
 
 class QuotenFehler(Exception):
@@ -66,10 +53,6 @@ def abruf_faellig(conn: sqlite3.Connection, *, stunden: int = 20) -> bool:
     if zeile is None or not zeile["letzter_erfolg_utc"]:
         return True
     return zeile["letzter_erfolg_utc"] < iso_utc(jetzt_utc() - timedelta(hours=stunden))
-
-
-def _name_de(api_name: str) -> str:
-    return ALIAS_DE.get(api_name) or deutscher_teamname(api_name)
 
 
 def _abrufen(einstellungen: Einstellungen) -> list[dict]:
@@ -129,8 +112,8 @@ def _h2h_quoten(event: dict) -> tuple[str, float, float, float] | None:
 def _spiel_finden(conn: sqlite3.Connection, event: dict) -> int | None:
     """Zuordnung über Anstoßzeit + Teamnamen; eindeutige Anstoßzeit als Fallback."""
     anstoss = str(event.get("commence_time") or "")
-    heim = _name_de(str(event.get("home_team") or ""))
-    gast = _name_de(str(event.get("away_team") or ""))
+    heim = deutscher_name_extern(str(event.get("home_team") or ""))
+    gast = deutscher_name_extern(str(event.get("away_team") or ""))
     zeile = conn.execute(
         "SELECT s.id FROM spiel s"
         " JOIN team th ON th.id = s.heim_team_id"

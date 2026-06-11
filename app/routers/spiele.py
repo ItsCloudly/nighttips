@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..abhaengigkeiten import aktueller_nutzer, get_db, get_einstellungen, ki_sichtbar
 from ..config import Einstellungen
-from ..services import agenten, turnier
+from ..services import agenten, aufstellungen, turnier
 from ..zeit import jetzt_iso
 
 router = APIRouter(prefix="/api", tags=["spiele"])
@@ -428,6 +428,9 @@ def team_detail(
         "ausgeschieden": team["id"] in turnier.ausgeschiedene_teams(conn),
         "trainer": dict(trainer) if trainer else None,
         "kader": [dict(spieler) for spieler in kader],
+        # Übliche Startelf aus den bisherigen offiziellen Aufstellungen (v0.1.1);
+        # None, solange noch keine vollständige Datenbasis existiert.
+        "startelf": aufstellungen.uebliche_startelf(conn, team_id),
         "taktik": dict(taktik) if taktik else None,
         "verletzungen": [dict(zeile) for zeile in verletzungen],
     }

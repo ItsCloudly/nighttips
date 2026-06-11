@@ -61,6 +61,12 @@ class Einstellungen:
     vapid_subject: str = "mailto:admin@example.invalid"
     tipp_erinnerung_minuten: int = 120
     anpfiff_erinnerung_minuten: int = 30
+    # Aufstellungen via inoffizieller ESPN-API (v0.1.1): kostenlos, kein Key.
+    # WM26_AUFSTELLUNGEN=0 schaltet den Poll ab.
+    aufstellungen_aktiv: bool = True
+    aufstellungen_basis_url: str = (
+        "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world"
+    )
     # Wettquoten via The Odds API (v0.1.1): leer = Quoten-Feature aus.
     quoten_token: str = ""
     quoten_basis_url: str = "https://api.the-odds-api.com/v4"
@@ -94,6 +100,11 @@ def lade_einstellungen() -> Einstellungen:
         vapid_subject=os.environ.get("WM26_VAPID_SUBJECT", "mailto:admin@example.invalid"),
         tipp_erinnerung_minuten=_int("WM26_TIPP_ERINNERUNG_MINUTEN", 120),
         anpfiff_erinnerung_minuten=_int("WM26_ANPFIFF_ERINNERUNG_MINUTEN", 30),
+        aufstellungen_aktiv=_bool("WM26_AUFSTELLUNGEN", True),
+        aufstellungen_basis_url=os.environ.get(
+            "WM26_AUFSTELLUNGEN_BASIS_URL",
+            "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world",
+        ),
         quoten_token=os.environ.get("WM26_QUOTEN_TOKEN", ""),
         quoten_basis_url=os.environ.get("WM26_QUOTEN_BASIS_URL", "https://api.the-odds-api.com/v4"),
         quoten_sport=os.environ.get("WM26_QUOTEN_SPORT", "soccer_fifa_world_cup"),

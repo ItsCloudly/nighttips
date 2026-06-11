@@ -59,3 +59,27 @@ TEAMNAMEN_DE = {
 
 def deutscher_teamname(api_name: str) -> str:
     return TEAMNAMEN_DE.get(api_name, api_name)
+
+
+# Externe Quellen (The Odds API, ESPN) benennen manche Teams anders als
+# football-data.org — zusätzliche Schreibweisen direkt auf Deutsch mappen.
+EXTERN_ALIAS_DE = {
+    "Bosnia and Herzegovina": "Bosnien-Herzegowina",
+    "Cape Verde": "Kap Verde",
+    "Curacao": "Curaçao",
+    "Czech Republic": "Tschechien",
+    "DR Congo": "DR Kongo",
+    "Democratic Republic of the Congo": "DR Kongo",
+    "Korea Republic": "Südkorea",
+    "South Korea": "Südkorea",
+    "Türkiye": "Türkei",
+    "Turkiye": "Türkei",
+    "USA": "USA",
+    "United States": "USA",
+    "USMNT": "USA",
+}
+
+
+def deutscher_name_extern(name: str) -> str:
+    """Teamname einer externen Quelle (Quoten/Aufstellungen) auf Deutsch."""
+    return EXTERN_ALIAS_DE.get(name) or deutscher_teamname(name)

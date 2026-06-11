@@ -37,7 +37,10 @@ CREATE TABLE IF NOT EXISTS spiel (
     ergebnis_nach TEXT CHECK (ergebnis_nach IN ('90', '120', 'elfmeterschiessen')),
     -- Elfmeterschießen: Sieger getrennt vom (Unentschieden-)Spielstand festhalten.
     elfmeter_sieger_team_id INTEGER REFERENCES team(id),
-    api_ref       TEXT UNIQUE
+    api_ref       TEXT UNIQUE,
+    -- Event-ID der inoffiziellen ESPN-API (Aufstellungs-Quelle, v0.1.1);
+    -- Bestands-DBs bekommen die Spalte per Migration in db.py.
+    espn_ref      TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_spiel_anstoss ON spiel(anstoss_utc);
@@ -234,6 +237,25 @@ CREATE TABLE IF NOT EXISTS bonustipp (
     punkte        INTEGER,
     UNIQUE (nutzer_id, bonusfrage_id)
 );
+
+-- Aufstellungen (SPEC 3.2, v0.1.1): Startelf/Bank je Spiel und Team.
+-- Quelle: inoffizielle ESPN-API, sobald die offiziellen Aufstellungen
+-- (~60 Min. vor Anpfiff) veröffentlicht sind; Admin kann korrigieren.
+CREATE TABLE IF NOT EXISTS aufstellung (
+    id                 INTEGER PRIMARY KEY,
+    spiel_id           INTEGER NOT NULL REFERENCES spiel(id) ON DELETE CASCADE,
+    team_id            INTEGER NOT NULL REFERENCES team(id) ON DELETE CASCADE,
+    spieler_id         INTEGER NOT NULL REFERENCES spieler(id) ON DELETE CASCADE,
+    rolle              TEXT NOT NULL CHECK (rolle IN ('startelf', 'bank')),
+    position_im_system TEXT,
+    formation          TEXT,
+    quelle             TEXT NOT NULL DEFAULT 'api' CHECK (quelle IN ('api', 'admin')),
+    erstellt_utc       TEXT NOT NULL,
+    UNIQUE (spiel_id, spieler_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_aufstellung_spiel ON aufstellung(spiel_id, team_id);
+CREATE INDEX IF NOT EXISTS idx_aufstellung_team ON aufstellung(team_id, rolle);
 
 -- Wettquoten (v0.1.1): 1X2-Dezimalquoten je Spiel von The Odds API
 -- (Anbieter z. B. Tipico). Reine Orientierung, täglich gesynct.
