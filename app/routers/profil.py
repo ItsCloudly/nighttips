@@ -29,6 +29,10 @@ async def profilbild_setzen(
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
     einstellungen: Annotated[Einstellungen, Depends(get_einstellungen)],
 ) -> dict[str, Any]:
+    # Früh ablehnen, bevor der Body in den Speicher gelesen wird
+    laenge = request.headers.get("content-length")
+    if laenge and laenge.isdigit() and int(laenge) > profilbilder.MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Bild ist zu groß (max. 2 MB).")
     rohdaten = await request.body()
     if len(rohdaten) > profilbilder.MAX_BYTES:
         raise HTTPException(status_code=413, detail="Bild ist zu groß (max. 2 MB).")
@@ -51,9 +55,11 @@ def profilbild_entfernen(
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
     einstellungen: Annotated[Einstellungen, Depends(get_einstellungen)],
 ) -> None:
-    profilbilder.loeschen(einstellungen, nutzer["profilbild"])
     with db.schreib_transaktion(conn):
         conn.execute("UPDATE nutzer SET profilbild = NULL WHERE id = ?", (nutzer["id"],))
+    # Datei erst nach dem erfolgreichen Commit löschen (nie umgekehrt)
+    if nutzer["profilbild"]:
+        profilbilder.loeschen(einstellungen, nutzer["profilbild"])
 
 
 @router.get("/profilbilder/{nutzer_id}")

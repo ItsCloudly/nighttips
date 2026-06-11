@@ -698,9 +698,23 @@ def nutzer_profilbild_entfernen(
     ).fetchone()
     if ziel is None:
         raise HTTPException(status_code=404, detail="Nutzer nicht gefunden")
-    profilbilder.loeschen(einstellungen, ziel["profilbild"])
     with db.schreib_transaktion(conn):
         conn.execute("UPDATE nutzer SET profilbild = NULL WHERE id = ?", (nutzer_id,))
+        db.change_log_eintrag(
+            conn,
+            entitaet="nutzer",
+            entitaet_id=nutzer_id,
+            feld="profilbild",
+            alt_wert=ziel["profilbild"],
+            neu_wert=None,
+            quelle="admin",
+            akteur=admin["anzeigename"],
+            zeitpunkt_utc=jetzt_iso(),
+        )
+    # Datei erst NACH dem erfolgreichen Commit wegräumen — schlägt die
+    # Transaktion fehl, zeigt die DB nie auf eine schon gelöschte Datei.
+    if ziel["profilbild"]:
+        profilbilder.loeschen(einstellungen, ziel["profilbild"])
 
 
 # ---------- Feedback-Posteingang (v0.1.1) ----------
