@@ -271,16 +271,77 @@ function filterFuellen() {
     zustand.teams
       .map((team) => `<option value="${team.id}">${escapeHtml(team.name)}</option>`)
       .join("");
-  el("filterTeam").innerHTML = teamOptionen;
-  el("filterTeam").value = zustand.filterTeam;
   el("newsTeamFilter").innerHTML = teamOptionen;
   el("newsTeamFilter").value = zustand.newsTeam;
+  teamFilterKnopfRendern();
 
   const rundenWahl = el("ranglisteRunde");
   rundenWahl.innerHTML = runden
     .map((runde) => `<option value="${escapeHtml(runde)}">${escapeHtml(runde)}</option>`)
     .join("");
   if (zustand.runde) rundenWahl.value = zustand.runde;
+}
+
+/* Team-Filter im Spiele-Tab: ein Knopf mit vier zufälligen Flaggen (bzw. der
+   Flagge des gewählten Teams) öffnet das Flaggen-Gitter zur Auswahl. */
+function teamFlaggeHtml(team) {
+  return team?.flagge_url
+    ? `<img class="flagge" src="${escapeHtml(team.flagge_url)}" alt="" loading="lazy">`
+    : '<span class="platzhalter-flagge"></span>';
+}
+
+// Einmal pro Sitzung gewürfelt — filterFuellen() läuft bei jedem
+// spieleLaden(), und der Knopf soll dabei nicht sichtbar neu mischen.
+let teamFilterZufall = null;
+
+function teamFilterKnopfRendern() {
+  const knopf = el("filterTeamKnopf");
+  if (!knopf) return;
+  const gewaehlt = zustand.teams.find((team) => team.id === Number(zustand.filterTeam));
+  if (gewaehlt) {
+    knopf.innerHTML = `${teamFlaggeHtml(gewaehlt)}<span class="team-filter-name">${escapeHtml(
+      gewaehlt.name
+    )}</span>`;
+    knopf.classList.add("aktiv");
+    return;
+  }
+  if (!teamFilterZufall?.length) {
+    teamFilterZufall = zustand.teams
+      .filter((team) => team.flagge_url)
+      .map((team) => ({ team, los: Math.random() }))
+      .sort((a, b) => a.los - b.los)
+      .slice(0, 4)
+      .map((eintrag) => eintrag.team);
+  }
+  knopf.innerHTML = teamFilterZufall.length
+    ? teamFilterZufall.map(teamFlaggeHtml).join("")
+    : "Teams";
+  knopf.classList.remove("aktiv");
+}
+
+function teamFilterWahlOeffnen() {
+  const eintrag = (team) => `<button type="button" class="team-wahl-eintrag${
+    Number(zustand.filterTeam) === team.id ? " aktiv" : ""
+  }" data-team-wahl="${team.id}">
+      ${teamFlaggeHtml(team)}<span>${escapeHtml(team.name)}</span>
+    </button>`;
+  lupeOeffnen(`<article class="team-wahl">
+    <h2>Team wählen</h2>
+    <div class="team-wahl-gitter">
+      <button type="button" class="team-wahl-eintrag${!zustand.filterTeam ? " aktiv" : ""}" data-team-wahl="">
+        <span class="team-wahl-alle" aria-hidden="true">⚽</span><span>Alle Teams</span>
+      </button>
+      ${zustand.teams.map(eintrag).join("")}
+    </div>
+  </article>`);
+  el("lupeInhalt").querySelector(".team-wahl-gitter").addEventListener("click", (ereignis) => {
+    const wahl = ereignis.target.closest("[data-team-wahl]");
+    if (!wahl) return;
+    zustand.filterTeam = wahl.dataset.teamWahl;
+    lupeSchliessen();
+    teamFilterKnopfRendern();
+    spieleRendern();
+  });
 }
 
 function spielIstGepinnt(spiel) {
@@ -606,13 +667,23 @@ function heroTeamHtml(team) {
   return `<div class="hero-team">${flagge}<span class="hero-team-name">${escapeHtml(name)}</span></div>`;
 }
 
-function heuteHeroHtml() {
-  const live = zustand.spiele.find((s) => s.status === "live" || s.status === "halbzeit");
-  const spiel =
-    live ??
-    zustand.spiele.find((s) => s.status === "geplant" && new Date(s.anstoss_utc) > new Date());
-  if (!spiel) return "";
-  const istLive = Boolean(live);
+/* Laufen mehrere Spiele parallel, erscheinen alle Live-Heros untereinander;
+   sonst zeigt ein einzelner Hero das nächste Spiel mit Countdown. Überfällige
+   Spiele (Anstoß vorbei, Status hängt noch auf „geplant“) bleiben bis zu 4 h
+   als „Anpfiff …“-Hero sichtbar statt vom Dashboard zu verschwinden. */
+function heuteHeroSpiele() {
+  const live = zustand.spiele.filter((s) => s.status === "live" || s.status === "halbzeit");
+  if (live.length) return { spiele: live, istLive: true };
+  const fenster = new Date(Date.now() - 4 * 3600 * 1000);
+  return {
+    spiele: zustand.spiele
+      .filter((s) => s.status === "geplant" && new Date(s.anstoss_utc) > fenster)
+      .slice(0, 1),
+    istLive: false,
+  };
+}
+
+function heuteHeroHtml(spiel, istLive) {
   const mitte = istLive
     ? `<div class="hero-stand">${spiel.tore_heim ?? 0} : ${spiel.tore_gast ?? 0}</div>
        ${liveBadgeHtml(spiel)}`
@@ -623,10 +694,11 @@ function heuteHeroHtml() {
       }</div>
        <span class="hero-label">Nächster Anpfiff</span>`;
   return `<button class="heute-hero" data-spiel-lupe="${spiel.id}"
-      ${istLive ? "" : `data-anstoss="${spiel.anstoss_utc}"`} aria-label="Zum Spiel">
-    <div class="hero-meta">${escapeHtml(spiel.runde)}${
-      spiel.stadion ? ` · ${escapeHtml(spiel.stadion)}` : ""
-    }</div>
+      ${istLive ? "" : `data-anstoss="${spiel.anstoss_utc}"`}
+      aria-label="Zum Spiel ${escapeHtml(spiel.heim?.name ?? "?")} gegen ${escapeHtml(spiel.gast?.name ?? "?")}">
+    <div class="hero-meta hero-meta-zeile"><span>${escapeHtml(spiel.runde)}</span><span>${
+      spiel.stadion ? escapeHtml(spiel.stadion) : ""
+    }</span></div>
     <div class="hero-duell">
       ${heroTeamHtml(spiel.heim)}
       <div class="hero-mitte">${mitte}</div>
@@ -636,9 +708,9 @@ function heuteHeroHtml() {
 }
 
 function quickKachelnHtml() {
+  // Nur Ziele ohne eigenen Platz in der Tab-Leiste unten (Turnierbaum und
+  // Rangliste sind dort einen Tipp entfernt — als Kacheln wären sie doppelt).
   const kacheln = [
-    ["turnier", "Turnierbaum", '<path d="M4 5h5v4H4zM4 15h5v4H4zM15 10h5v4h-5zM9 7h3v5h3M9 17h3v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>'],
-    ["rangliste", "Rangliste", '<path d="M6 4h12v3a4 4 0 0 1-4 4h-4A4 4 0 0 1 6 7Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v4m-3 5h6m-3-5v5" stroke="currentColor" stroke-width="1.8"/>'],
     ["bonus", "Bonusfragen", '<rect x="5" y="5" width="14" height="14" rx="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.8 9.5a2.2 2.2 0 1 1 3 2c-.7.4-.8.9-.8 1.5m0 2.6v.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'],
     ["news", "News", '<rect x="4" y="5" width="16" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7.5 9h9M7.5 12.5h9M7.5 16h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>'],
   ];
@@ -658,10 +730,13 @@ async function heuteRendern() {
     month: "long",
   });
   const teile = [];
-  const hero = heuteHeroHtml();
+  const heroWahl = heuteHeroSpiele();
+  const heros = heroWahl.spiele
+    .map((spiel) => heuteHeroHtml(spiel, heroWahl.istLive))
+    .join("");
   // Ohne anstehendes Spiel (z. B. nach dem Finale): Stadion-Ruhebild als Bühne
   teile.push(
-    hero ||
+    heros ||
       `<div class="heute-hero stadion-ruhe">
         <img src="/illustrationen/stadium-hero.webp" alt="" loading="lazy">
         <div class="hero-label">Gerade kein Spiel — das Stadion ruht</div>
@@ -679,25 +754,51 @@ async function heuteRendern() {
     </button>`);
   }
   teile.push(quickKachelnHtml());
-  const heutige = zustand.spiele.filter(
-    (s) => istHeute(s.anstoss_utc) && spielStatusGruppe(s) !== "live"
-  );
-  if (heutige.length) {
-    teile.push('<h2 class="tages-titel">Heute</h2>');
-    for (const spiel of heutige.slice(0, 6)) teile.push(spielKarte(spiel, null));
+  // Horizontale Leiste der nächsten Spiele (ersetzt News-Teaser und den
+  // alten „Heute“-Block); die News folgen darunter als vertikale Liste.
+  // Was schon als Hero oben steht, taucht in der Leiste nicht nochmal auf.
+  const heroIds = new Set(heroWahl.spiele.map((spiel) => spiel.id));
+  const kommend = zustand.spiele
+    .filter(
+      (s) =>
+        s.status === "geplant" && new Date(s.anstoss_utc) > new Date() && !heroIds.has(s.id)
+    )
+    .slice(0, 10);
+  if (kommend.length) {
+    teile.push('<h2 class="tages-titel">Kommende Spiele</h2>');
+    teile.push(`<div class="teaser-leiste">${kommend.map(kommendKarteHtml).join("")}</div>`);
   }
   el("heuteInhalt").innerHTML = teile.join("");
   countdownStarten();
   newsTeaserLaden().catch(() => {});
 }
 
+function kommendKarteHtml(spiel) {
+  const team = (t) =>
+    `<span class="kommend-team">${
+      t?.flagge_url ? `<img class="flagge" src="${escapeHtml(t.flagge_url)}" alt="" loading="lazy">` : ""
+    }${escapeHtml(t?.fifa_code ?? "?")}</span>`;
+  const tipp = spiel.mein_tipp
+    ? `Tipp ${spiel.mein_tipp.tipp_heim}:${spiel.mein_tipp.tipp_gast}`
+    : "Tipp offen";
+  return `<button class="teaser-karte kommend-karte" data-spiel-lupe="${spiel.id}">
+    <span class="teaser-quelle">${tagLabel(lokalesDatum(spiel.anstoss_utc))} · ${lokaleUhrzeit(
+      spiel.anstoss_utc
+    )} Uhr</span>
+    <span class="kommend-duell">${team(spiel.heim)}<span class="kommend-vs">–</span>${team(spiel.gast)}</span>
+    <span class="kommend-fuss">${escapeHtml(spiel.runde)} · ${tipp}</span>
+  </button>`;
+}
+
+/* News als vertikale Liste am Seitenende — einfach weiterscrollen und lesen
+   (die horizontale Leiste oben gehört jetzt den kommenden Spielen). */
 async function newsTeaserLaden() {
-  const items = await api("/api/news?limit=6");
+  const items = await api("/api/news?limit=10");
   if (!items.length || el("view-heute").hidden) return;
   zustand.teaserItems = items;
   const karten = items
     .map(
-      (item, index) => `<button class="teaser-karte" data-teaser-reader="${index}">
+      (item, index) => `<button class="news-zeile" data-teaser-reader="${index}">
         <span class="teaser-quelle">${escapeHtml(item.feed_titel ?? "News")}</span>
         <span class="teaser-titel">${escapeHtml(item.titel)}</span>
       </button>`
@@ -705,7 +806,7 @@ async function newsTeaserLaden() {
     .join("");
   el("heuteInhalt").insertAdjacentHTML(
     "beforeend",
-    `<h2 class="tages-titel">News</h2><div class="teaser-leiste">${karten}</div>`
+    `<h2 class="tages-titel">News</h2><div class="news-bereich">${karten}</div>`
   );
 }
 
@@ -852,10 +953,7 @@ function spieleEreignisse() {
     zustand.filterGruppe = ereignis.target.value;
     spieleRendern();
   });
-  el("filterTeam").addEventListener("change", (ereignis) => {
-    zustand.filterTeam = ereignis.target.value;
-    spieleRendern();
-  });
+  el("filterTeamKnopf").addEventListener("click", teamFilterWahlOeffnen);
 }
 
 function heuteEreignisse() {
@@ -2265,10 +2363,13 @@ function koBaumHtml() {
       .filter((s) => s.status === "geplant" && new Date(s.anstoss_utc) > new Date())
       .sort((a, b) => a.anstoss_utc.localeCompare(b.anstoss_utc))[0];
   const finale = runden.find((eintrag) => eintrag.runde === "Finale")?.spiele[0] ?? null;
+  // Überschrift oben in jeder Spalte (eine gemeinsame Kopfzeile), die Spiele
+  // darunter vertikal zentriert — sonst schwebt z. B. „Finale“ in der Mitte.
   const spalten = runden
     .map(
       (eintrag) => `<div class="baum-spalte">
         <h3>${escapeHtml(eintrag.runde)}</h3>
+        <div class="baum-spiele">
         ${eintrag.spiele.map((spiel) => baumSpielHtml(spiel, aktuelles?.id)).join("")}
         ${
           eintrag.runde === "Finale"
@@ -2280,6 +2381,7 @@ function koBaumHtml() {
                 : "")
             : ""
         }
+        </div>
       </div>`
     )
     .join("");
@@ -2633,6 +2735,9 @@ async function ranglisteLaden() {
     // Eine Tabelle statt Einzelkarten: die Spalten-Labels stehen genau einmal
     // im Kopf. Tendenz erst ab 720 px (.nur-breit), sonst wird 375 px zu eng.
     const mitBonus = eintraege.some((eintrag) => eintrag.bonus_punkte > 0);
+    // Sobald irgendwer Live-Punkte hat, zeigen alle einen Chip (+0 in grau) —
+    // so bleiben die Zeilenhöhen gleich.
+    const mitLive = eintraege.some((eintrag) => eintrag.punkte_live > 0);
     const zeilen = eintraege
       .map((eintrag) => {
         const ki = eintrag.rolle === "ki" ? '<span class="ki">KI</span>' : "";
@@ -2645,7 +2750,7 @@ async function ranglisteLaden() {
           <td class="num">${eintrag.differenz}</td>
           <td class="num nur-breit">${eintrag.tendenz}</td>
           <td class="rang-form">${tipperFormkette(eintrag.form)}</td>
-          <td class="num rang-punkte"${bonus}>${eintrag.punkte}${livePrognoseChip(eintrag)}</td>
+          <td class="num rang-punkte"${bonus}>${eintrag.punkte}${livePrognoseChip(eintrag, mitLive)}</td>
         </tr>`;
       })
       .join("");
@@ -2676,9 +2781,15 @@ async function ranglisteLaden() {
 }
 
 /* Live-Prognose: Punkte, die ein Tipper bekäme, würden die gerade laufenden
-   Spiele so enden — bewusst getrennt von den echten Punkten ausgewiesen. */
-function livePrognoseChip(eintrag) {
-  if (!eintrag.punkte_live) return "";
+   Spiele so enden — bewusst getrennt von den echten Punkten ausgewiesen.
+   immerAnzeigen: in der Tabelle bekommt dann jeder ein graues +0, damit
+   alle Zeilen gleich hoch bleiben. */
+function livePrognoseChip(eintrag, immerAnzeigen = false) {
+  if (!eintrag.punkte_live) {
+    return immerAnzeigen
+      ? ' <span class="rang-live leer" title="Keine Zusatzpunkte aus den laufenden Spielen">+0</span>'
+      : "";
+  }
   return ` <span class="rang-live" title="Prognose: Enden die laufenden Spiele so, kommen +${eintrag.punkte_live} dazu">+${eintrag.punkte_live}</span>`;
 }
 

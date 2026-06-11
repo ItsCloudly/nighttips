@@ -639,6 +639,22 @@ input.tipp-eingabe:focus {
   margin-bottom: 12px;
 }
 
+/* Heute-Hero: Runde linksbündig (über dem Heimteam), Stadion rechtsbündig */
+.hero-meta-zeile {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  text-align: left;
+}
+
+.hero-meta-zeile span:last-child {
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .hero-duell {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -729,7 +745,7 @@ input.tipp-eingabe:focus {
 /* Quick-Access-Kacheln */
 .quick-kacheln {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
 
@@ -759,6 +775,49 @@ input.tipp-eingabe:focus {
   overflow-x: auto;
   padding-bottom: 6px;
   scroll-snap-type: x proximity;
+}
+
+/* Kommende Spiele als horizontale Panels (Heute-Dashboard) — doppelte Klasse
+   schlägt das flex-Shorthand der später definierten .teaser-karte */
+.teaser-karte.kommend-karte { flex-basis: 200px; }
+
+.kommend-duell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 2px 0;
+}
+
+.kommend-team { display: inline-flex; align-items: center; gap: 6px; }
+
+.kommend-team .flagge { width: 24px; height: 17px; border-radius: 3px; object-fit: cover; }
+
+.kommend-vs { color: var(--ink-2); }
+
+.kommend-fuss {
+  font-size: 0.74rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* News darunter: vertikale Liste zum Durchscrollen */
+.news-bereich { display: flex; flex-direction: column; gap: 10px; }
+
+.news-zeile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  border: 0;
+  background: var(--ns-surface-1);
+  border-radius: var(--ns-radius-zelle);
+  padding: 12px 14px;
+  animation: karte-auf 0.34s var(--ease-aus) both;
 }
 
 .teaser-karte {
@@ -2055,6 +2114,15 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* Überschriften aller Spalten oben in einer Reihe; nur die Spiele werden
+   in der verbleibenden Höhe zentriert (sonst schwebt „Finale“ mittig). */
+.baum-spiele {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   justify-content: center;
 }
 
@@ -2600,7 +2668,76 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
   white-space: nowrap;
 }
 
+/* Ohne Zusatzpunkte: graues +0, damit alle Zeilen gleich hoch bleiben */
+.rang-live.leer { color: var(--ink-2); }
+
 .podium-punkte .rang-live { font-size: 0.85rem; }
+
+/* Team-Filter im Spiele-Tab: Flaggen-Knopf statt Dropdown */
+.team-filter-knopf {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  background: var(--ns-surface-1);
+  border-radius: 999px;
+  padding: 7px 12px;
+  min-height: 36px;
+}
+
+.team-filter-knopf .flagge {
+  width: 22px;
+  height: 15px;
+  border-radius: 3px;
+  object-fit: cover;
+}
+
+.team-filter-knopf.aktiv {
+  border-color: var(--akzent);
+  font-weight: 700;
+}
+
+.team-filter-name { font-size: 0.85rem; }
+
+/* Flaggen-Gitter zur Teamwahl (öffnet in der Lupe) */
+.team-wahl h2 { margin: 4px 2px 14px; }
+
+.team-wahl-gitter {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+}
+
+.team-wahl-eintrag {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  background: var(--ns-surface-1);
+  border-radius: var(--ns-radius-zelle);
+  padding: 12px 6px 10px;
+  font-size: 0.78rem;
+  text-align: center;
+}
+
+.team-wahl-eintrag .flagge,
+.team-wahl-eintrag .platzhalter-flagge {
+  width: 42px;
+  height: 29px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.team-wahl-alle {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 29px;
+  font-size: 1.2rem;
+}
+
+.team-wahl-eintrag.aktiv { border-color: var(--akzent); }
 
 /* Gruppen: Quali-Zonen (Platz 1-2 direkt, Platz 3 möglich) */
 .gruppe-zeile { position: relative; }
