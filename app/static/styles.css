@@ -472,6 +472,11 @@ select:focus-visible, input:focus-visible, button:focus-visible {
   animation: puls 1.4s ease-in-out infinite;
 }
 
+/* Ungefähre Spielminute im LIVE-Badge; leer (Halbzeit) verschwindet der
+   Span ganz, sonst bliebe die Flex-Lücke des Badges sichtbar */
+.live-minute { font-variant-numeric: tabular-nums; }
+.live-minute:empty { display: none; }
+
 @keyframes puls {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.35; transform: scale(0.7); }
@@ -2585,6 +2590,17 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
   color: var(--ns-bg);
   box-shadow: 0 0 8px color-mix(in srgb, var(--ns-gold) 55%, transparent);
 }
+
+/* Live-Prognose neben den echten Punkten (Rangliste + Podium): grün und
+   bewusst kleiner — „so stünde es, wenn jetzt abgepfiffen würde“ */
+.rang-live {
+  color: var(--ns-green);
+  font-weight: 800;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.podium-punkte .rang-live { font-size: 0.85rem; }
 
 /* Gruppen: Quali-Zonen (Platz 1-2 direkt, Platz 3 möglich) */
 .gruppe-zeile { position: relative; }

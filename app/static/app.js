@@ -206,6 +206,8 @@ function liveVerbinden() {
     spiel.tippbar = daten.status === "geplant" && new Date(daten.anstoss_utc) > new Date();
     if (!el("view-spiele").hidden) spieleRendern(flash ? daten.id : null);
     if (!el("view-heute").hidden) heuteRendern().catch(() => {});
+    // Live-Prognose in der Rangliste aktuell halten, falls sie gerade offen ist
+    if (!el("view-rangliste").hidden) ranglisteLaden().catch(() => {});
     if (zustand.lupeSpielId === daten.id) lupeStandAktualisieren(daten, flash);
   };
 
@@ -514,6 +516,43 @@ function countdownText(bisMs) {
   return `${fuelle(h)}:${fuelle(m)}:${fuelle(s)}`;
 }
 
+/* Ungefähre Spielminute, ab Anstoß fortgeschrieben (die API liefert keine
+   verlässliche Minute): 1. Halbzeit endet bei 45+’, die 2. zählt ab dem
+   Wiederanpfiff laut Ticker (Fallback: ~15 Minuten Pause) bis 90+’. */
+function spielminuteText(spiel) {
+  if (spiel.status !== "live") return "";
+  const zeit = spiel.live_zeit ?? {};
+  const anzeige = (minute, limit) => (minute > limit ? `${limit}+’` : `${Math.max(minute, 1)}’`);
+  if (zeit.zweite_hz_utc) {
+    return anzeige(46 + Math.floor((Date.now() - new Date(zeit.zweite_hz_utc)) / 60000), 90);
+  }
+  const vergangen = Math.floor((Date.now() - new Date(zeit.anpfiff_utc ?? spiel.anstoss_utc)) / 60000);
+  // Deutlich über 45 + Nachspielzeit ohne Wiederanpfiff-Eintrag: 2. Halbzeit läuft schon
+  if (vergangen >= 61) return anzeige(vergangen - 15 + 1, 90);
+  return anzeige(vergangen + 1, 45);
+}
+
+function liveBadgeHtml(spiel) {
+  const minute = spielminuteText(spiel);
+  return `<span class="badge live"><span class="live-punkt"></span>${
+    spiel.status === "halbzeit" ? "HALBZEIT" : "LIVE"
+  }<span class="live-minute" data-live-minute="${spiel.id}">${
+    minute ? `· ${minute}` : ""
+  }</span></span>`;
+}
+
+/* Minutenticker: schreibt die Spielminute alle 20 s in alle sichtbaren
+   Live-Badges — gezielt nur den Text, kein Re-Render. */
+setInterval(() => {
+  for (const feld of document.querySelectorAll("[data-live-minute]")) {
+    const spiel = zustand.spiele.find((s) => s.id === Number(feld.dataset.liveMinute));
+    if (!spiel) continue;
+    const minute = spielminuteText(spiel);
+    const text = minute ? `· ${minute}` : "";
+    if (feld.textContent !== text) feld.textContent = text;
+  }
+}, 20000);
+
 function countdownStarten() {
   clearInterval(countdownTimer);
   countdownTimer = setInterval(() => {
@@ -576,9 +615,7 @@ function heuteHeroHtml() {
   const istLive = Boolean(live);
   const mitte = istLive
     ? `<div class="hero-stand">${spiel.tore_heim ?? 0} : ${spiel.tore_gast ?? 0}</div>
-       <span class="badge live"><span class="live-punkt"></span>${
-         spiel.status === "halbzeit" ? "HALBZEIT" : "LIVE"
-       }</span>`
+       ${liveBadgeHtml(spiel)}`
     : `<div class="hero-countdown">${
         new Date(spiel.anstoss_utc) > new Date()
           ? countdownText(new Date(spiel.anstoss_utc) - new Date())
@@ -1159,9 +1196,7 @@ function lupeHeroHtml(detail, phase) {
       <span class="hero-label">Anpfiff ${lokaleUhrzeit(detail.anstoss_utc)} Uhr</span>`;
   } else if (phase === "live") {
     mitte = `<div class="lupe-stand">${odometerZiffer(detail.tore_heim)}<span class="stand-punkt">:</span>${odometerZiffer(detail.tore_gast)}</div>
-      <span class="badge live"><span class="live-punkt"></span>${
-        detail.status === "halbzeit" ? "HALBZEIT" : "LIVE"
-      }</span>`;
+      ${liveBadgeHtml(detail)}`;
   } else if (detail.status === "abgesagt") {
     mitte = `<div class="lupe-stand">–</div><span class="badge">Abgesagt</span>`;
   } else {
@@ -2588,7 +2623,7 @@ async function ranglisteLaden() {
             <div class="podium-medaille">${medaillen[eintrag.platz - 1] ?? ""}</div>
             ${avatarHtml(eintrag, "tipper-avatar podium-avatar")}
             <div class="podium-name">${escapeHtml(eintrag.anzeigename)}${ki}</div>
-            <div class="podium-punkte">${eintrag.punkte}</div>
+            <div class="podium-punkte">${eintrag.punkte}${livePrognoseChip(eintrag)}</div>
             <div class="podium-detail">${eintrag.exakt}× exakt</div>
           </div>`;
           })
@@ -2610,7 +2645,7 @@ async function ranglisteLaden() {
           <td class="num">${eintrag.differenz}</td>
           <td class="num nur-breit">${eintrag.tendenz}</td>
           <td class="rang-form">${tipperFormkette(eintrag.form)}</td>
-          <td class="num rang-punkte"${bonus}>${eintrag.punkte}</td>
+          <td class="num rang-punkte"${bonus}>${eintrag.punkte}${livePrognoseChip(eintrag)}</td>
         </tr>`;
       })
       .join("");
@@ -2630,10 +2665,21 @@ async function ranglisteLaden() {
       </table>
       <p class="rang-fussnote">Sp = gewertete Tipps · 4er = exakt · 3er = Differenz · 2er = Tendenz${
         mitBonus ? " · Pkt inkl. Bonuspunkte" : ""
+      }${
+        eintraege.some((eintrag) => eintrag.punkte_live > 0)
+          ? " · grünes +x = Prognose, falls die laufenden Spiele so enden"
+          : ""
       }</p>
     </div>`;
   }
   await bonusfragenLaden().catch(fehlerAnzeigen);
+}
+
+/* Live-Prognose: Punkte, die ein Tipper bekäme, würden die gerade laufenden
+   Spiele so enden — bewusst getrennt von den echten Punkten ausgewiesen. */
+function livePrognoseChip(eintrag) {
+  if (!eintrag.punkte_live) return "";
+  return ` <span class="rang-live" title="Prognose: Enden die laufenden Spiele so, kommen +${eintrag.punkte_live} dazu">+${eintrag.punkte_live}</span>`;
 }
 
 /* Formkette eines Tippers: Punkte der letzten gewerteten Tipps als Farbpunkte

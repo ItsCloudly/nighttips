@@ -91,6 +91,32 @@ def test_formkette_neueste_zuerst(client, conn, welt):
     assert detail["form"]["gast"] == ["S"]
 
 
+def test_rangliste_live_prognose(client, conn, welt, einstellungen):
+    """Laufende Spiele zählen als separate Live-Prognose, nicht in den Punkten."""
+    from app.services import tippspiel
+
+    spiel_id = welt["zukunft"]
+    _tipp(conn, welt["ids"]["Mia"], spiel_id, 1, 0)   # träfe exakt → +4 prognostiziert
+    _tipp(conn, welt["ids"]["Chef"], spiel_id, 0, 1)  # falsche Tendenz → +0
+    conn.execute(
+        "UPDATE spiel SET status='live', tore_heim=1, tore_gast=0 WHERE id = ?", (spiel_id,)
+    )
+    conn.commit()
+    eintraege = tippspiel.rangliste(conn)
+    mia = next(e for e in eintraege if e["anzeigename"] == "Mia")
+    chef = next(e for e in eintraege if e["anzeigename"] == "Chef")
+    assert (mia["punkte"], mia["punkte_live"]) == (0, 4)
+    assert chef["punkte_live"] == 0
+
+    # Nach Abpfiff wandert die Prognose in die echten Punkte
+    conn.execute("UPDATE spiel SET status='beendet' WHERE id = ?", (spiel_id,))
+    conn.commit()
+    tippspiel.spiel_auswerten(conn, spiel_id, einstellungen, akteur="test")
+    eintraege = tippspiel.rangliste(conn)
+    mia = next(e for e in eintraege if e["anzeigename"] == "Mia")
+    assert (mia["punkte"], mia["punkte_live"]) == (4, 0)
+
+
 def test_rangliste_formkette(client, conn, welt):
     """Rangliste liefert die Punkte der letzten gewerteten Tipps (Formkette)."""
     from app.services import tippspiel

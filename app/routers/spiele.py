@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from ..abhaengigkeiten import aktueller_nutzer, get_db, get_einstellungen, ki_sichtbar
 from ..config import Einstellungen
-from ..services import agenten, aufstellungen, turnier
+from ..services import agenten, aufstellungen, live, turnier
 from ..zeit import jetzt_iso
 
 router = APIRouter(prefix="/api", tags=["spiele"])
@@ -104,6 +104,10 @@ def spiele_liste(
         spiel["gepinnt"] = zeile["id"] in spiel_pins
         spiel["team_gepinnt"] = zeile["heim_id"] in team_pins or zeile["gast_id"] in team_pins
         spiel["hat_notiz"] = zeile["id"] in notiz_spiele
+        # Bezugszeiten für die Spielminute (None außer bei laufenden Spielen)
+        spiel["live_zeit"] = live.spielzeit(
+            conn, spiel_id=zeile["id"], anstoss_utc=zeile["anstoss_utc"], status=zeile["status"]
+        )
         spiele.append(spiel)
     return spiele
 
@@ -118,6 +122,9 @@ def spiel_detail(
     if zeile is None:
         raise HTTPException(status_code=404, detail="Spiel nicht gefunden")
     spiel = _spiel_json(zeile)
+    spiel["live_zeit"] = live.spielzeit(
+        conn, spiel_id=zeile["id"], anstoss_utc=zeile["anstoss_utc"], status=zeile["status"]
+    )
     # Sichtbarkeitsregeln (SPEC 5.2/5.4): fremde Tipps erst ab Anpfiff; der
     # KI-Tipp erscheint ausschließlich für KI-freigeschaltete Profile.
     vor_anpfiff = zeile["anstoss_utc"] > jetzt_iso()

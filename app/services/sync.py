@@ -36,6 +36,36 @@ JOB_STAMMDATEN = "stammdaten"
 JOB_ERGEBNISSE = "ergebnisse"
 JOB_VERGLEICHE = "vergleiche"
 
+# Unbestätigte Tor-Rücknahmen je api_ref: Die Quelle liefert bei Live-Spielen
+# gelegentlich kurz wieder einen alten Stand (Cache-Flattern, z. B. 1:0 → 0:0
+# → 1:0), was Geistertore und falsche VAR-Einträge in den Ticker schreibt.
+# Ein niedrigerer Stand wird deshalb erst übernommen, wenn ihn der nächste
+# Lauf bestätigt; Erhöhungen (Tore) laufen ungebremst durch.
+_unbestaetigte_korrekturen: dict[str, tuple[int | None, int | None]] = {}
+
+
+def _korrektur_unbestaetigt(conn: sqlite3.Connection, daten: dict) -> bool:
+    """True: Tor-Rücknahme bei laufendem Spiel, die erst bestätigt werden muss."""
+    api_ref = daten.get("api_ref")
+    if api_ref is None:
+        return False
+    zeile = conn.execute(
+        "SELECT status, tore_heim, tore_gast FROM spiel WHERE api_ref = ?", (api_ref,)
+    ).fetchone()
+    if zeile is None or zeile["status"] not in ("live", "halbzeit"):
+        _unbestaetigte_korrekturen.pop(api_ref, None)
+        return False
+    neu = (daten["tore_heim"], daten["tore_gast"])
+    alt = (zeile["tore_heim"], zeile["tore_gast"])
+    ruecklaeufig = any(
+        n is not None and a is not None and n < a for n, a in zip(neu, alt)
+    )
+    if not ruecklaeufig or _unbestaetigte_korrekturen.get(api_ref) == neu:
+        _unbestaetigte_korrekturen.pop(api_ref, None)
+        return False
+    _unbestaetigte_korrekturen[api_ref] = neu
+    return True
+
 
 @dataclass
 class SyncBericht:
@@ -92,6 +122,8 @@ def _spiele_verarbeiten(
     with db.schreib_transaktion(conn):
         for match in matches:
             daten = mappe_match(match)
+            if _korrektur_unbestaetigt(conn, daten):
+                continue
             heim_id = _team_id_aus_api_ref(conn, daten["heim_api_ref"])
             gast_id = _team_id_aus_api_ref(conn, daten["gast_api_ref"])
             ort_id = None

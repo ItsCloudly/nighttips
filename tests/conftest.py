@@ -11,6 +11,7 @@ from app import db as db_modul
 from app import ratelimit
 from app.config import Einstellungen
 from app.main import create_app
+from app.services import sync as sync_service
 
 
 @pytest.fixture(autouse=True)
@@ -18,6 +19,12 @@ def _ratelimit_zuruecksetzen() -> None:
     """Der Rate-Limiter ist prozessweit — vor jedem Test leeren, sonst summieren
     sich Treffer über Tests hinweg und lösen fremde 429 aus."""
     ratelimit.zuruecksetzen()
+
+
+@pytest.fixture(autouse=True)
+def _korrektur_puffer_zuruecksetzen() -> None:
+    """Der Tor-Rücknahme-Puffer des Syncs ist prozessweit — vor jedem Test leeren."""
+    sync_service._unbestaetigte_korrekturen.clear()
 
 
 @pytest.fixture

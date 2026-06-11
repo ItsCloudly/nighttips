@@ -150,6 +150,41 @@ def spiele_mit_offener_auswertung(conn: sqlite3.Connection) -> list[int]:
     return [zeile["id"] for zeile in zeilen]
 
 
+def _live_prognose(
+    conn: sqlite3.Connection, *, datum: str | None = None, runde: str | None = None
+) -> dict[int, int]:
+    """Hypothetische Punkte je Nutzer, würden die laufenden Spiele jetzt so enden.
+
+    Nur Orientierung für die Rangliste (separat ausgewiesen) — gewertet wird
+    weiterhin ausschließlich nach Abpfiff über spiel_auswerten.
+    """
+    bedingungen = [
+        "s.status IN ('live', 'halbzeit')",
+        "s.tore_heim IS NOT NULL",
+        "s.tore_gast IS NOT NULL",
+    ]
+    parameter: list[str] = []
+    if datum is not None:
+        bedingungen.append("substr(s.anstoss_utc, 1, 10) = ?")
+        parameter.append(datum)
+    if runde is not None:
+        bedingungen.append("s.runde = ?")
+        parameter.append(runde)
+    zeilen = conn.execute(
+        "SELECT t.nutzer_id, t.tipp_heim, t.tipp_gast, s.tore_heim, s.tore_gast"
+        " FROM tipp t JOIN spiel s ON s.id = t.spiel_id"
+        f" WHERE {' AND '.join(bedingungen)}",
+        parameter,
+    ).fetchall()
+    prognose: dict[int, int] = {}
+    for zeile in zeilen:
+        punkte = berechne_punkte(
+            zeile["tipp_heim"], zeile["tipp_gast"], zeile["tore_heim"], zeile["tore_gast"]
+        )
+        prognose[zeile["nutzer_id"]] = prognose.get(zeile["nutzer_id"], 0) + punkte
+    return prognose
+
+
 def rangliste(
     conn: sqlite3.Connection,
     *,
@@ -211,6 +246,7 @@ def rangliste(
         ),
     )
     formketten = _tipp_formketten(conn)
+    prognose = _live_prognose(conn, datum=datum, runde=runde)
     ergebnis = []
     platz = 0
     vorherige_punkte: int | None = None
@@ -227,6 +263,7 @@ def rangliste(
                 "rolle": zeile["rolle"],
                 "profilbild": zeile["profilbild"],
                 "punkte": punkte,
+                "punkte_live": prognose.get(zeile["id"], 0),
                 "bonus_punkte": zeile["bonus_punkte"] if mit_bonus else 0,
                 "tipps_gewertet": zeile["tipps_gewertet"],
                 "exakt": zeile["exakt"] or 0,

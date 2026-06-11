@@ -53,8 +53,11 @@ def test_sync_leitet_ereignisse_aus_deltas_ab(conn, einstellungen):
     assert bericht.ereignisse == 2
     assert [e["typ"] for e in _ereignisse(conn)[-2:]] == ["tor", "tor"]
 
-    # VAR-Korrektur: Tor zurückgenommen
+    # VAR-Korrektur: Tor zurückgenommen — zählt erst, wenn der Folgelauf
+    # den niedrigeren Stand bestätigt (Schutz gegen API-Flattern)
     api = ApiAttrappe(API_TEAMS, [_match_mit("IN_PLAY", (1, 1), minute=72)])
+    sync.ergebnis_sync(conn, einstellungen, api=api)
+    assert _ereignisse(conn)[-1]["typ"] == "tor"  # noch zurückgehalten
     sync.ergebnis_sync(conn, einstellungen, api=api)
     assert _ereignisse(conn)[-1]["typ"] == "var"
 
@@ -75,6 +78,88 @@ def test_halbzeit_uebergaenge(conn, einstellungen):
     letzte = _ereignisse(conn)[-1]
     assert letzte["typ"] == "freitext"
     assert "2. Halbzeit" in letzte["text"]
+
+
+def test_api_flattern_erzeugt_keine_geistertore(conn, einstellungen):
+    """Pendelt die API zwischen neuem und altem Stand (Cache-Flattern beim
+    4-Sekunden-Poll), bleibt es bei EINEM Tor — keine Geister-Korrekturen."""
+    api = ApiAttrappe(API_TEAMS, [_match_mit("IN_PLAY", (0, 0))])
+    sync.stammdaten_sync(conn, einstellungen, api=api)
+    api = ApiAttrappe(API_TEAMS, [_match_mit("IN_PLAY", (1, 0), minute=12)])
+    sync.ergebnis_sync(conn, einstellungen, api=api)
+    for tore in ((0, 0), (1, 0), (0, 0), (1, 0)):
+        api = ApiAttrappe(API_TEAMS, [_match_mit("IN_PLAY", tore)])
+        sync.ergebnis_sync(conn, einstellungen, api=api)
+    assert [e["typ"] for e in _ereignisse(conn)] == ["tor"]
+    spiel = conn.execute("SELECT tore_heim, tore_gast FROM spiel").fetchone()
+    assert (spiel["tore_heim"], spiel["tore_gast"]) == (1, 0)
+
+
+def test_bestaetigte_ruecknahme_wird_uebernommen(conn, einstellungen):
+    """Eine echte VAR-Rücknahme kommt durch — einen Poll-Takt später."""
+    api = ApiAttrappe(API_TEAMS, [_match_mit("IN_PLAY", (0, 0))])
+    sync.stammdaten_sync(conn, einstellungen, api=api)
+    api = ApiAttrappe(API_TEAMS, [_match_mit("IN_PLAY", (1, 0), minute=12)])
+    sync.ergebnis_sync(conn, einstellungen, api=api)
+
+    api = ApiAttrappe(API_TEAMS, [_match_mit("IN_PLAY", (0, 0), minute=15)])
+    sync.ergebnis_sync(conn, einstellungen, api=api)
+    spiel = conn.execute("SELECT tore_heim FROM spiel").fetchone()
+    assert spiel["tore_heim"] == 1  # erster Lauf: noch zurückgehalten
+
+    sync.ergebnis_sync(conn, einstellungen, api=api)
+    spiel = conn.execute("SELECT tore_heim FROM spiel").fetchone()
+    assert spiel["tore_heim"] == 0
+    letzte = _ereignisse(conn)[-1]
+    assert letzte["typ"] == "var"
+    assert "0:0" in letzte["text"]
+
+
+def test_spielzeit_bezugspunkte(conn, einstellungen):
+    """live_zeit liefert Anpfiff- und Wiederanpfiff-Bezug für die Minutenanzeige."""
+    api = ApiAttrappe(API_TEAMS, [_match_mit("TIMED", (None, None))])
+    sync.stammdaten_sync(conn, einstellungen, api=api)
+    spiel = conn.execute("SELECT id, anstoss_utc, status FROM spiel").fetchone()
+    assert (
+        live.spielzeit(
+            conn, spiel_id=spiel["id"], anstoss_utc=spiel["anstoss_utc"], status=spiel["status"]
+        )
+        is None
+    )
+
+    api = ApiAttrappe(API_TEAMS, [_match_mit("IN_PLAY", (0, 0))])
+    sync.ergebnis_sync(conn, einstellungen, api=api)
+    zeit = live.spielzeit(
+        conn, spiel_id=spiel["id"], anstoss_utc=spiel["anstoss_utc"], status="live"
+    )
+    # Anpfiff-Ereignis liegt weit nach der (fiktiven) Anstoßzeit 2030 →
+    # Rückfall auf die geplante Zeit; kein Wiederanpfiff bekannt
+    assert zeit == {"anpfiff_utc": spiel["anstoss_utc"], "zweite_hz_utc": None}
+
+    api = ApiAttrappe(API_TEAMS, [_match_mit("PAUSED", (0, 0))])
+    sync.ergebnis_sync(conn, einstellungen, api=api)
+    api = ApiAttrappe(API_TEAMS, [_match_mit("IN_PLAY", (0, 0))])
+    sync.ergebnis_sync(conn, einstellungen, api=api)
+    zeit = live.spielzeit(
+        conn, spiel_id=spiel["id"], anstoss_utc=spiel["anstoss_utc"], status="live"
+    )
+    assert zeit["zweite_hz_utc"] is not None
+
+    # Liegt der Anpfiff-Eintrag nah an der geplanten Zeit, ist er der Bezug
+    from datetime import timedelta
+
+    from app.zeit import iso_utc, parse_utc
+
+    echt = iso_utc(parse_utc(spiel["anstoss_utc"]) + timedelta(minutes=2))
+    conn.execute(
+        "INSERT INTO ereignis (spiel_id, typ, erstellt_utc) VALUES (?, 'anpfiff', ?)",
+        (spiel["id"], echt),
+    )
+    conn.commit()
+    zeit = live.spielzeit(
+        conn, spiel_id=spiel["id"], anstoss_utc=spiel["anstoss_utc"], status="live"
+    )
+    assert zeit["anpfiff_utc"] == echt
 
 
 def test_nachtraeglicher_endstand_erzeugt_kein_live_tor(conn, einstellungen):

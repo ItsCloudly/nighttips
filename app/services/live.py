@@ -19,7 +19,7 @@ import sqlite3
 import threading
 from typing import Any
 
-from ..zeit import jetzt_iso
+from ..zeit import jetzt_iso, parse_utc
 
 logger = logging.getLogger("wm26.live")
 
@@ -115,6 +115,39 @@ def ereignis_json(conn: sqlite3.Connection, ereignis_id: int) -> dict[str, Any] 
         (ereignis_id,),
     ).fetchone()
     return dict(zeile) if zeile else None
+
+
+def spielzeit(
+    conn: sqlite3.Connection, *, spiel_id: int, anstoss_utc: str, status: str
+) -> dict[str, Any] | None:
+    """Bezugszeitpunkte für die ungefähre Spielminute laufender Spiele.
+
+    Die API liefert keine verlässliche Minute — der Client schreibt sie ab dem
+    Anstoß fort. Der Anpfiff-Ticker-Eintrag ist der genauere Bezug, sofern er
+    nah an der geplanten Zeit liegt (sonst war der Sync zu spät dran); der
+    Wiederanpfiff-Eintrag bestimmt die Minuten der 2. Halbzeit.
+    """
+    if status not in ("live", "halbzeit"):
+        return None
+    anpfiff = conn.execute(
+        "SELECT erstellt_utc FROM ereignis WHERE spiel_id = ? AND typ = 'anpfiff'"
+        " ORDER BY id DESC LIMIT 1",
+        (spiel_id,),
+    ).fetchone()
+    zweite = conn.execute(
+        "SELECT erstellt_utc FROM ereignis WHERE spiel_id = ? AND typ = 'freitext'"
+        " AND text = 'Anpfiff 2. Halbzeit' ORDER BY id DESC LIMIT 1",
+        (spiel_id,),
+    ).fetchone()
+    basis = anstoss_utc
+    if anpfiff is not None:
+        versatz = (parse_utc(anpfiff["erstellt_utc"]) - parse_utc(anstoss_utc)).total_seconds()
+        if 0 <= versatz <= 15 * 60:
+            basis = anpfiff["erstellt_utc"]
+    return {
+        "anpfiff_utc": basis,
+        "zweite_hz_utc": zweite["erstellt_utc"] if zweite else None,
+    }
 
 
 _STATUS_EREIGNIS = {
