@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WM26 – Tippspiel</title>
+<meta name="theme-color" content="#0A0C10">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<link rel="preload" href="/fonts/space-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css?v=20">
+<!-- FOUC-Schutz: Modus vor dem ersten Rendern setzen; extern statt inline (CSP) -->
+<script src="/boot.js?v=20"></script>
+</head>
+<body>
+<div class="app-shell">
+  <main id="hauptbereich">
+
+    <section id="view-login" class="view" hidden>
+      <div class="login-buehne">
+        <div class="login-karte">
+          <div class="wm-marke">
+            <span class="wm-jahr">WM</span><span class="wm-jahr akzent">26</span>
+            <span class="gastgeber-band" aria-hidden="true"></span>
+          </div>
+          <p class="untertitel">Das Tippspiel zur Weltmeisterschaft<br>in den USA, Mexiko &amp; Kanada</p>
+          <div class="login-tabs">
+            <div class="segmente" role="tablist" aria-label="Anmelden oder registrieren">
+              <button id="tabAnmelden" class="aktiv" role="tab" aria-selected="true" type="button">Anmelden</button>
+              <button id="tabRegistrieren" role="tab" aria-selected="false" type="button">Registrieren</button>
+            </div>
+          </div>
+          <form id="loginFormular" autocomplete="on">
+            <label for="loginName">Name</label>
+            <input id="loginName" name="username" type="text" autocomplete="username"
+                   required maxlength="50" autocapitalize="off">
+            <label for="loginPin">PIN</label>
+            <input id="loginPin" name="password" type="password" autocomplete="current-password"
+                   required minlength="4" maxlength="32" inputmode="numeric">
+            <p id="loginFehler" class="fehler" hidden></p>
+            <button type="submit" class="primaer breit">Anmelden</button>
+          </form>
+          <form id="registrierFormular" autocomplete="on" hidden>
+            <label for="regName">Name</label>
+            <input id="regName" name="username" type="text" autocomplete="username"
+                   required maxlength="50" autocapitalize="off">
+            <label for="regPin">PIN (mind. 6 Zeichen)</label>
+            <input id="regPin" type="password" autocomplete="new-password"
+                   required minlength="6" maxlength="32">
+            <label for="regPin2">PIN wiederholen</label>
+            <input id="regPin2" type="password" autocomplete="new-password"
+                   required minlength="6" maxlength="32">
+            <label for="regGruppe">Gruppen-Passwort</label>
+            <input id="regGruppe" type="password" autocomplete="off" required maxlength="64">
+            <p class="hinweis">Das Gruppen-Passwort bekommst du vom Admin der Tipprunde.</p>
+            <p id="registrierFehler" class="fehler" hidden></p>
+            <button type="submit" class="primaer breit">Konto erstellen</button>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-onboarding" class="view" hidden>
+      <div class="onboarding">
+
+        <div class="onboarding-schritt" data-schritt="push">
+          <img class="onboarding-hero" src="/illustrationen/hero-push.webp" alt="">
+          <h1>Verpass kein Tor</h1>
+          <p class="onboarding-sub">Wir melden uns bei Anpfiff, Toren und Endständen —
+            und wenn du noch nicht getippt hast.</p>
+          <div class="karte toggle-liste">
+            <label class="toggle-zeile master">
+              <span><strong>Benachrichtigungen</strong><br>
+                <span class="hinweis-zeile">Push direkt aufs Handy</span></span>
+              <span class="schalter"><input id="onboardingPush" type="checkbox"><span class="schalter-knauf"></span></span>
+            </label>
+            <div class="toggle-zeile info"><span>⚽ Tore deiner gepinnten Spiele</span><span class="haken">✓</span></div>
+            <div class="toggle-zeile info"><span>▶ Anpfiff &amp; Endstand</span><span class="haken">✓</span></div>
+            <div class="toggle-zeile info"><span>⏰ Tipp-Erinnerung vor dem Spiel</span><span class="haken">✓</span></div>
+          </div>
+          <button class="primaer breit" data-onboarding-weiter>Weiter</button>
+          <button class="onboarding-skip" data-onboarding-weiter>Später</button>
+        </div>
+
+        <div class="onboarding-schritt" data-schritt="team" hidden>
+          <img class="onboarding-hero" src="/illustrationen/hero-team-pick.webp" alt="">
+          <h1>Wähl deine Teams</h1>
+          <p class="onboarding-sub">Gepinnte Teams stehen oben in der Spieleliste
+            und lösen Push-Alarme aus.</p>
+          <input id="onboardingSuche" type="search" placeholder="Team suchen …" aria-label="Team suchen">
+          <div id="onboardingTeams" class="flaggen-gitter"></div>
+          <button class="primaer breit" data-onboarding-fertig>Los geht's</button>
+          <button class="onboarding-skip" data-onboarding-fertig>Überspringen</button>
+        </div>
+
+      </div>
+    </section>
+
+    <section id="view-heute" class="view" hidden>
+      <header class="seitenkopf heute-kopf">
+        <div class="kopfzeile">
+          <div>
+            <p id="heuteDatum" class="heute-datum"></p>
+            <h1 id="heuteGruss">Moin!</h1>
+          </div>
+          <button id="wettbewerbKnopf" class="wettbewerb-chip" hidden
+                  aria-label="Wettbewerb oder Saison wählen">WM 2026</button>
+        </div>
+      </header>
+      <div id="heuteInhalt" class="liste"></div>
+    </section>
+
+    <section id="view-spiele" class="view" hidden>
+      <header class="seitenkopf">
+        <div class="kopfzeile">
+          <h1>Spiele</h1>
+        </div>
+        <div id="spieleTage" class="tag-leiste datums-chips" role="group" aria-label="Spieltag wählen"></div>
+        <div class="filterzeile">
+          <div class="segmente klein" id="spieleFilterStatus" role="tablist" aria-label="Nach Status filtern">
+            <button data-status="alle" class="aktiv" role="tab" aria-selected="true">Alle</button>
+            <button data-status="live" role="tab" aria-selected="false">Live</button>
+            <button data-status="anstehend" role="tab" aria-selected="false">Anstehend</button>
+            <button data-status="beendet" role="tab" aria-selected="false">Beendet</button>
+            <button data-status="gepinnt" role="tab" aria-selected="false">★</button>
+          </div>
+          <select id="filterGruppe" aria-label="Nach Runde filtern">
+            <option value="">Alle Runden</option>
+          </select>
+          <select id="filterTeam" aria-label="Nach Team filtern">
+            <option value="">Alle Teams</option>
+          </select>
+        </div>
+      </header>
+      <div id="spieleListe" class="liste"></div>
+    </section>
+
+    <section id="view-rangliste" class="view" hidden>
+      <header class="seitenkopf">
+        <h1>Rangliste</h1>
+        <div class="filterzeile">
+          <div class="segmente" role="tablist" aria-label="Zeitraum">
+            <button data-zeitraum="gesamt" class="aktiv" role="tab" aria-selected="true">Gesamt</button>
+            <button data-zeitraum="heute" role="tab" aria-selected="false">Heute</button>
+            <button data-zeitraum="runde" role="tab" aria-selected="false">Runde</button>
+          </div>
+          <select id="ranglisteRunde" aria-label="Runde wählen" hidden></select>
+        </div>
+      </header>
+      <div id="podium" class="podium" hidden></div>
+      <div id="ranglisteListe" class="liste"></div>
+      <div id="bonusBereich" hidden>
+        <h2 class="abschnitt-titel bonus-titel">
+          <img src="/illustrationen/bonus-question.webp" alt="" loading="lazy">Bonusfragen</h2>
+        <div id="bonusListe" class="liste"></div>
+      </div>
+    </section>
+
+    <section id="view-turnier" class="view" hidden>
+      <header class="seitenkopf">
+        <h1>Turnier</h1>
+        <div class="filterzeile">
+          <div class="segmente" id="turnierModus" role="tablist" aria-label="Turnieransicht">
+            <button data-turnier="gruppen" class="aktiv" role="tab" aria-selected="true">Gruppen</button>
+            <button data-turnier="baum" role="tab" aria-selected="false">K.o.-Baum</button>
+          </div>
+        </div>
+      </header>
+      <div id="turnierInhalt"></div>
+    </section>
+
+    <section id="view-teams" class="view" hidden>
+      <header class="seitenkopf">
+        <h1>Teams</h1>
+        <div class="filterzeile">
+          <input id="teamSuche" type="search" placeholder="Team suchen …" aria-label="Team suchen">
+        </div>
+      </header>
+      <div id="teamsGitter" class="teams-gitter"></div>
+    </section>
+
+    <section id="view-news" class="view" hidden>
+      <header class="seitenkopf">
+        <h1>News</h1>
+        <div class="filterzeile">
+          <select id="newsTeamFilter" aria-label="News nach Team filtern">
+            <option value="">Alle Teams</option>
+          </select>
+        </div>
+        <div id="newsTagLeiste" class="tag-leiste" role="group" aria-label="Nach Thema filtern"></div>
+      </header>
+      <div id="newsListe" class="liste"></div>
+    </section>
+
+    <section id="view-mehr" class="view" hidden>
+      <header class="seitenkopf"><h1>Mehr</h1></header>
+      <div class="liste">
+        <div class="karte">
+          <h2>Entdecken</h2>
+          <div class="knopfzeile">
+            <button data-mehr-ziel="news">📰 News-Archiv</button>
+            <button data-mehr-ziel="teams">🛡️ Alle Teams</button>
+          </div>
+        </div>
+        <div class="karte">
+          <h2>Konto</h2>
+          <p id="kontoInfo"></p>
+          <div class="knopfzeile">
+            <button id="pushKnopf" hidden></button>
+            <button id="logoutKnopf" class="gefahr">Abmelden</button>
+          </div>
+          <p id="pushHinweis" class="hinweis" hidden></p>
+          <p id="appVersion" class="hinweis"></p>
+        </div>
+        <div class="karte">
+          <h2>Punkteregeln</h2>
+          <ul class="regeln">
+            <li><strong>4 Punkte</strong> – exaktes Ergebnis</li>
+            <li><strong>3 Punkte</strong> – richtige Tordifferenz</li>
+            <li><strong>2 Punkte</strong> – richtige Tendenz</li>
+            <li>Bonusfragen bringen Extrapunkte (siehe Tippspiel).</li>
+            <li>Tipps sind bis zum Anpfiff möglich und änderbar.</li>
+            <li>Fremde Tipps werden erst ab Anpfiff sichtbar.</li>
+            <li>K.o.-Spiele: Elfmeterschießen zählt als Unentschieden.</li>
+          </ul>
+        </div>
+        <div id="adminBereich" hidden>
+          <div class="karte">
+            <h2>Verwaltung</h2>
+            <form id="nutzerFormular" class="inline-formular">
+              <h3>Nutzer anlegen</h3>
+              <input id="neuName" placeholder="Name" aria-label="Name des neuen Nutzers"
+                     required maxlength="50" autocapitalize="off">
+              <input id="neuPin" placeholder="PIN (mind. 6 Zeichen)" aria-label="PIN des neuen Nutzers"
+                     required minlength="6" maxlength="32">
+              <select id="neuRolle" aria-label="Rolle des neuen Nutzers">
+                <option value="mitglied">Mitglied</option>
+                <option value="admin">Admin</option>
+                <option value="ki">KI-Tipper</option>
+              </select>
+              <button type="submit" class="primaer">Anlegen</button>
+            </form>
+            <div class="knopfzeile">
+              <button id="syncKnopf">Ergebnis-Sync</button>
+              <button id="stammdatenKnopf">Stammdaten-Sync</button>
+              <button id="feedsAbrufKnopf">News abrufen</button>
+            </div>
+            <div id="syncStatus" class="sync-status"></div>
+            <p id="adminMeldung" class="hinweis" hidden></p>
+          </div>
+          <div class="karte">
+            <h3>Nutzer</h3>
+            <p class="hinweis">„KI-Wertung“ schaltet die KI-Prognosen und -Analysen
+              für den jeweiligen Nutzer frei — alle anderen sehen sie nicht.</p>
+            <div id="nutzerListe"></div>
+          </div>
+          <div class="karte">
+            <h3>News-Feeds</h3>
+            <form id="feedFormular" class="inline-formular">
+              <input id="feedUrl" type="url" placeholder="https://… (RSS/Atom)"
+                     aria-label="Feed-URL (RSS oder Atom)" required>
+              <input id="feedTitel" placeholder="Name (optional)"
+                     aria-label="Anzeigename des Feeds" maxlength="100">
+              <button type="submit" class="primaer">Abonnieren</button>
+            </form>
+            <div id="feedListe"></div>
+          </div>
+          <div class="karte">
+            <h3>Bonusfrage anlegen</h3>
+            <form id="bonusFormular" class="inline-formular">
+              <input id="bonusFrage" placeholder="Frage, z. B. Wer wird Weltmeister?"
+                     aria-label="Text der Bonusfrage" required maxlength="200">
+              <select id="bonusTyp" aria-label="Antworttyp der Bonusfrage">
+                <option value="team">Antwort: Team</option>
+                <option value="spieler">Antwort: Spieler</option>
+              </select>
+              <input id="bonusPunkte" type="number" min="1" max="100" value="10" aria-label="Punktwert">
+              <input id="bonusSchluss" type="datetime-local" required aria-label="Einsendeschluss">
+              <button type="submit" class="primaer">Anlegen</button>
+            </form>
+            <div id="adminBonusListe"></div>
+          </div>
+          <div class="karte">
+            <h3>Agent-Tokens</h3>
+            <p class="hinweis">Zugriff für Claude-Sessions (Skill „Spielbewertung“). Der Token wird genau einmal angezeigt.</p>
+            <form id="tokenFormular" class="inline-formular">
+              <input id="tokenName" placeholder="Name, z. B. skill-juni" aria-label="Token-Name" required maxlength="50">
+              <select id="tokenScopes" aria-label="Berechtigungen">
+                <option value="read">Nur lesen</option>
+                <option value="read,write_analysis" selected>Lesen + Analysen schreiben</option>
+              </select>
+              <button type="submit" class="primaer">Erzeugen</button>
+            </form>
+            <p id="tokenAnzeige" class="hinweis token-anzeige" hidden></p>
+            <div id="tokenListe"></div>
+          </div>
+          <div class="karte">
+            <h3>Agenten-Vorschläge</h3>
+            <p class="hinweis">Taktik- und Verletzungs-Vorschläge zur Sichtung.</p>
+            <div id="beitragListe"></div>
+          </div>
+          <div class="karte">
+            <h3>Aktive Overrides</h3>
+            <p class="hinweis">Manuell gesetzte Werte, die API-Syncs überdauern.</p>
+            <div id="overrideListe"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <nav id="leiste" class="pill-nav" hidden aria-label="Hauptnavigation">
+    <button data-view="heute" class="aktiv" aria-label="Heute">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4.5l8 7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10.5V19h12v-8.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M10 19v-5h4v5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span>Heute</span>
+    </button>
+    <button data-view="spiele" aria-label="Spiele">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7.2 16.4 10.4 14.7 15.6H9.3L7.6 10.4Z" fill="currentColor"/></svg>
+      <span>Spiele</span>
+    </button>
+    <button data-view="turnier" aria-label="Turnier">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h5v4H4zM4 15h5v4H4zM15 10h5v4h-5zM9 7h3v5h3M9 17h3v-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span>Turnier</span>
+    </button>
+    <button data-view="rangliste" aria-label="Rangliste">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v3a4 4 0 0 1-4 4h-4A4 4 0 0 1 6 7Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 5H4a2 2 0 0 0 2 4M18 5h2a2 2 0 0 1-2 4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 11v4m-3 5h6m-3-5v5" stroke="currentColor" stroke-width="1.8"/></svg>
+      <span>Rangliste</span>
+    </button>
+    <button data-view="mehr" aria-label="Mehr">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="18" cy="12" r="1.7" fill="currentColor"/></svg>
+      <span>Mehr</span>
+    </button>
+  </nav>
+
+  <div id="lupe" class="lupe" hidden>
+    <div class="lupe-hintergrund" data-lupe-schliessen></div>
+    <div class="lupe-blatt" role="dialog" aria-modal="true">
+      <div class="lupe-griff" aria-hidden="true"></div>
+      <button class="lupe-zu" data-lupe-schliessen aria-label="Schließen">✕</button>
+      <div id="lupeInhalt" class="lupe-inhalt"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+</div>
+<script src="/app.js?v=20"></script>
+</body>
+</html>

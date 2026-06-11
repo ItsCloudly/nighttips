@@ -1,0 +1,10 @@
+# Nächtliches DB-Backup (siehe deploy/wm26-backup.timer). Installation:
+#   cp deploy/wm26-backup.* ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now wm26-backup.timer
+[Unit]
+Description=WM26 Datenbank-Backup
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/wm26
+ExecStart=%h/wm26/.venv/bin/python tools/db_backup.py --db daten/wm26.db --ziel %h/backups/wm26 --tage 14

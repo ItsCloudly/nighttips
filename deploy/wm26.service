@@ -1,0 +1,18 @@
+# systemd-User-Unit. Installation siehe docs/BETRIEB.md:
+#   cp deploy/wm26.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now wm26.service
+[Unit]
+Description=WM26 Tippspiel (FastAPI)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/wm26
+# --proxy-headers: hinter Tailscale Funnel kommt die Client-IP per X-Forwarded-For.
+# --forwarded-allow-ips=127.0.0.1: nur dem lokalen Funnel-Proxy vertrauen, damit
+# ein Client den X-Forwarded-For-Header nicht selbst fälschen kann (IP-Sperre).
+ExecStart=%h/wm26/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8026 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

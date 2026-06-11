@@ -1,0 +1,21 @@
+{
+  "teams": [
+    {"fifa_code": "MEX", "name": "Mexiko", "gruppe": "A"},
+    {"fifa_code": "USA", "name": "USA", "gruppe": "D"},
+    {"fifa_code": "CAN", "name": "Kanada", "gruppe": "B"},
+    {"fifa_code": "GER", "name": "Deutschland", "gruppe": "E"},
+    {"fifa_code": "SCO", "name": "Schottland", "gruppe": "E"},
+    {"fifa_code": "BRA", "name": "Brasilien", "gruppe": "C"}
+  ],
+  "spielorte": [
+    {"stadion_name": "Estadio Azteca", "stadt": "Mexiko-Stadt", "land": "Mexiko", "kapazitaet": 87523, "zeitzone": "America/Mexico_City"},
+    {"stadion_name": "MetLife Stadium", "stadt": "East Rutherford", "land": "USA", "kapazitaet": 82500, "zeitzone": "America/New_York"},
+    {"stadion_name": "BMO Field", "stadt": "Toronto", "land": "Kanada", "kapazitaet": 45736, "zeitzone": "America/Toronto"}
+  ],
+  "spiele": [
+    {"runde": "Gruppe A", "anstoss_utc": "2026-06-09T19:00:00Z", "stadion": "Estadio Azteca", "heim": "MEX", "gast": "CAN", "status": "beendet", "tore_heim": 2, "tore_gast": 1, "ergebnis_nach": "90"},
+    {"runde": "Gruppe A", "anstoss_utc": "2026-06-11T19:00:00Z", "stadion": "Estadio Azteca", "heim": "MEX", "gast": "BRA"},
+    {"runde": "Gruppe D", "anstoss_utc": "2026-06-12T22:00:00Z", "stadion": "MetLife Stadium", "heim": "USA", "gast": "CAN"},
+    {"runde": "Gruppe E", "anstoss_utc": "2026-06-13T16:00:00Z", "stadion": "BMO Field", "heim": "GER", "gast": "SCO"}
+  ]
+}

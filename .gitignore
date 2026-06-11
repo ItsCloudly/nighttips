@@ -1,0 +1,20 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Secrets und Laufzeitdaten bleiben außerhalb des Repos
+.env
+daten/
+*.db
+*.db-wal
+*.db-shm
+*.bundle
+
+# Interne Betriebs- und Planungsdoku (enthält private Infrastruktur-Details)
+docs-intern/
+
+# Rohmaterial der KI-generierten Illustrationen (~25 MB) — ins Repo kommen
+# nur die konvertierten WebPs unter app/static/illustrationen/
+assets-roh/

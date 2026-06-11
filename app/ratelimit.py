@@ -1,0 +1,59 @@
+"""Schlanker In-Process-Rate-Limiter (gleitendes Fenster, pro Schlüssel).
+
+Sitzt VOR den teuren Login-/Registrierungspfaden und wehrt unauthentifizierte
+Fluten ab, bevor sie scrypt auslösen (CPU-DoS-Schutz auf dem Rock64). Bewusst
+prozesslokal: der Service läuft als ein uvicorn-Worker (siehe deploy/wm26.service).
+Bei mehreren Workern wäre ein geteilter Speicher (Redis o. ä.) nötig.
+"""
+from __future__ import annotations
+
+import threading
+import time
+from collections import deque
+
+_lock = threading.Lock()
+_treffer: dict[str, deque[float]] = {}
+_LETZTE_REINIGUNG = [0.0]
+
+
+def _aufraeumen(jetzt: float, fenster: float) -> None:
+    """Leere Fenster-Deques entfernen, damit der Speicher nicht unbegrenzt wächst."""
+    for schluessel in list(_treffer.keys()):
+        eintraege = _treffer[schluessel]
+        while eintraege and eintraege[0] <= jetzt - fenster:
+            eintraege.popleft()
+        if not eintraege:
+            del _treffer[schluessel]
+
+
+def erlaubt(schluessel: str, *, limit: int, fenster_sekunden: float) -> bool:
+    """True, wenn unter dem Limit (und zählt den Treffer); False, wenn überschritten.
+
+    Gleitendes Fenster: erlaubt höchstens `limit` Treffer je `fenster_sekunden`.
+    """
+    if limit <= 0:
+        return True
+    jetzt = time.monotonic()
+    with _lock:
+        eintraege = _treffer.get(schluessel)
+        if eintraege is None:
+            eintraege = deque()
+            _treffer[schluessel] = eintraege
+        grenze = jetzt - fenster_sekunden
+        while eintraege and eintraege[0] <= grenze:
+            eintraege.popleft()
+        if len(eintraege) >= limit:
+            return False
+        eintraege.append(jetzt)
+        # Gelegentlich global aufräumen (höchstens alle 60 s), günstig amortisiert.
+        if jetzt - _LETZTE_REINIGUNG[0] > 60:
+            _LETZTE_REINIGUNG[0] = jetzt
+            _aufraeumen(jetzt, fenster_sekunden)
+        return True
+
+
+def zuruecksetzen() -> None:
+    """Nur für Tests: kompletten Zustand leeren."""
+    with _lock:
+        _treffer.clear()
+        _LETZTE_REINIGUNG[0] = 0.0
