@@ -524,14 +524,37 @@ function countdownStarten() {
     }
     const rest = new Date(karte.dataset.anstoss) - new Date();
     const zeit = karte.querySelector(".hero-countdown");
-    if (zeit) zeit.textContent = countdownText(rest);
     if (rest <= 0) {
+      // Anstoßzeit erreicht, aber die API stellt den Status erst gleich um:
+      // ruhig warten statt im Sekundentakt neu zu rendern (UI-Flackern).
       clearInterval(countdownTimer);
-      spieleLaden()
-        .then(() => heuteRendern())
-        .catch(fehlerAnzeigen);
+      if (zeit) zeit.textContent = "Anpfiff …";
+      heuteAnpfiffAbwarten(Number(karte.dataset.spielLupe));
+      return;
     }
+    if (zeit) zeit.textContent = countdownText(rest);
   }, 1000);
+}
+
+/* Wartet gelassen auf den Statuswechsel (SSE aktualisiert zustand.spiele);
+   alle 15 s ein Nachladen als Fallback, falls die SSE-Verbindung hakt. */
+function heuteAnpfiffAbwarten(spielId) {
+  clearInterval(countdownTimer);
+  let ticks = 0;
+  countdownTimer = setInterval(() => {
+    if (el("view-heute").hidden) {
+      clearInterval(countdownTimer);
+      return;
+    }
+    ticks += 1;
+    const spiel = zustand.spiele.find((eintrag) => eintrag.id === spielId);
+    if (spiel && spiel.status !== "geplant") {
+      clearInterval(countdownTimer);
+      heuteRendern().catch(() => {});
+      return;
+    }
+    if (ticks % 5 === 0) spieleLaden().catch(() => {});
+  }, 3000);
 }
 
 /* ---------- Heute (Dashboard) ---------- */
@@ -556,7 +579,11 @@ function heuteHeroHtml() {
        <span class="badge live"><span class="live-punkt"></span>${
          spiel.status === "halbzeit" ? "HALBZEIT" : "LIVE"
        }</span>`
-    : `<div class="hero-countdown">${countdownText(new Date(spiel.anstoss_utc) - new Date())}</div>
+    : `<div class="hero-countdown">${
+        new Date(spiel.anstoss_utc) > new Date()
+          ? countdownText(new Date(spiel.anstoss_utc) - new Date())
+          : "Anpfiff …"
+      }</div>
        <span class="hero-label">Nächster Anpfiff</span>`;
   return `<button class="heute-hero" data-spiel-lupe="${spiel.id}"
       ${istLive ? "" : `data-anstoss="${spiel.anstoss_utc}"`} aria-label="Zum Spiel">
@@ -1126,8 +1153,9 @@ function lupeHeroHtml(detail, phase) {
     color-mix(in srgb, ${gastFarbe ?? "#46c8ff"} 24%, var(--ns-surface-1)))`;
   let mitte = "";
   if (phase === "vor") {
+    const rest = new Date(detail.anstoss_utc) - new Date();
     mitte = `<div class="lupe-stand" data-lupe-anstoss="${detail.anstoss_utc}">
-        ${countdownText(new Date(detail.anstoss_utc) - new Date())}</div>
+        ${rest > 0 ? countdownText(rest) : "Anpfiff …"}</div>
       <span class="hero-label">Anpfiff ${lokaleUhrzeit(detail.anstoss_utc)} Uhr</span>`;
   } else if (phase === "live") {
     mitte = `<div class="lupe-stand">${odometerZiffer(detail.tore_heim)}<span class="stand-punkt">:</span>${odometerZiffer(detail.tore_gast)}</div>
@@ -1660,12 +1688,37 @@ function lupeCountdownStarten(spielId) {
       return;
     }
     const rest = new Date(stand.dataset.lupeAnstoss) - new Date();
-    stand.textContent = countdownText(rest);
     if (rest <= 0) {
+      // Anstoßzeit erreicht, API-Status hängt noch auf "geplant": NICHT im
+      // Sekundentakt neu öffnen (UI-Flackern) — gelassen auf den Wechsel warten.
+      clearInterval(lupeCountdownTimer);
+      stand.textContent = "Anpfiff …";
+      lupeAnpfiffAbwarten(spielId);
+      return;
+    }
+    stand.textContent = countdownText(rest);
+  }, 1000);
+}
+
+/* Wartet auf den Statuswechsel (SSE pflegt zustand.spiele) und öffnet die
+   Lupe dann genau EINMAL neu; alle 15 s ein Nachladen als SSE-Fallback. */
+function lupeAnpfiffAbwarten(spielId) {
+  clearInterval(lupeCountdownTimer);
+  let ticks = 0;
+  lupeCountdownTimer = setInterval(() => {
+    if (zustand.lupeSpielId !== spielId) {
+      clearInterval(lupeCountdownTimer);
+      return;
+    }
+    ticks += 1;
+    const spiel = zustand.spiele.find((eintrag) => eintrag.id === spielId);
+    if (spiel && spiel.status !== "geplant") {
       clearInterval(lupeCountdownTimer);
       spielLupeOeffnen(spielId).catch(() => {});
+      return;
     }
-  }, 1000);
+    if (ticks % 5 === 0) spieleLaden().catch(() => {});
+  }, 3000);
 }
 
 async function spielNewsLaden(detail) {
@@ -1710,7 +1763,10 @@ async function spielLupeOeffnen(spielId, startTab = null) {
   ];
   lupeOeffnen(teile.join(""));
 
-  if (phase === "vor") lupeCountdownStarten(spielId);
+  if (phase === "vor") {
+    if (new Date(detail.anstoss_utc) > new Date()) lupeCountdownStarten(spielId);
+    else lupeAnpfiffAbwarten(spielId); // Anstoß vorbei, Status hängt noch
+  }
   teamTabCache.clear();
   if (detail.heim && detail.gast) {
     teamTabLaden(detail.heim.id).catch(() => {
