@@ -232,6 +232,33 @@ CREATE TABLE IF NOT EXISTS bonustipp (
     UNIQUE (nutzer_id, bonusfrage_id)
 );
 
+-- Private Spiel-Notizen (v0.1.1): eigene Gedanken je Nutzer und Spiel.
+-- Strikt privat — taucht in keiner Tippliste und keinem Agenten-Export auf.
+CREATE TABLE IF NOT EXISTS notiz (
+    id            INTEGER PRIMARY KEY,
+    nutzer_id     INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE,
+    spiel_id      INTEGER NOT NULL REFERENCES spiel(id) ON DELETE CASCADE,
+    text          TEXT NOT NULL,
+    erstellt_utc  TEXT NOT NULL,
+    geaendert_utc TEXT NOT NULL,
+    UNIQUE (nutzer_id, spiel_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notiz_nutzer ON notiz(nutzer_id);
+
+-- Feedback/Fehlermeldungen (v0.1.1): Nutzer melden aus der App heraus,
+-- der Admin sichtet den Posteingang in der Verwaltung.
+CREATE TABLE IF NOT EXISTS feedback (
+    id           INTEGER PRIMARY KEY,
+    nutzer_id    INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE,
+    kategorie    TEXT NOT NULL CHECK (kategorie IN ('fehler', 'idee', 'sonstiges')),
+    nachricht    TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'offen' CHECK (status IN ('offen', 'erledigt')),
+    erstellt_utc TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status, erstellt_utc DESC);
+
 -- Admin-Overrides (SPEC 3.5): überdauern API-Syncs, Priorität admin > api.
 CREATE TABLE IF NOT EXISTS override (
     id           INTEGER PRIMARY KEY,

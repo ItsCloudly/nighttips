@@ -12,7 +12,18 @@ from fastapi.staticfiles import StaticFiles
 from . import db, scheduler
 from . import APP_VERSION
 from .config import Einstellungen, lade_einstellungen
-from .routers import admin, agenten, auth, news_bonus, pins, spiele, stream, tipps
+from .routers import (
+    admin,
+    agenten,
+    auth,
+    feedback,
+    news_bonus,
+    notizen,
+    pins,
+    spiele,
+    stream,
+    tipps,
+)
 from .services.live import broker
 
 logger = logging.getLogger("wm26")
@@ -86,6 +97,8 @@ def create_app(einstellungen: Einstellungen | None = None) -> FastAPI:
     app.include_router(stream.router)
     app.include_router(pins.router)
     app.include_router(news_bonus.router)
+    app.include_router(notizen.router)
+    app.include_router(feedback.router)
     app.include_router(agenten.router)
 
     @app.get("/api/health")

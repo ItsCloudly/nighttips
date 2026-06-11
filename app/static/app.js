@@ -380,6 +380,9 @@ function spielKarte(spiel, flashId) {
     `${lokaleUhrzeit(spiel.anstoss_utc)} Uhr`,
     escapeHtml(spiel.runde),
     spiel.stadion ? escapeHtml(spiel.stadion) : null,
+    spiel.hat_notiz
+      ? '<span class="notiz-marker" title="Du hast eine Notiz zu diesem Spiel">✎</span>'
+      : null,
   ].filter(Boolean);
 
   let badge = "";
@@ -1249,9 +1252,62 @@ function panelTippsHtml(detail, phase) {
     </section>`);
   }
   teile.push(ringTrioHtml(detail));
+  teile.push(notizSektionHtml(detail));
   teile.push(analyseSektionHtml(detail, "prognose", "KI-Prognose"));
   teile.push(`<section class="lupe-abschnitt"><h3>Tipps der Runde</h3>${tippZeilenHtml(detail)}</section>`);
   return teile.join("");
+}
+
+/* Private Notiz zum Spiel: zugeklappt eine Zeile, aufgeklappt Textarea mit
+   Auto-Save (debounced). Leeren löscht die Notiz serverseitig. */
+function notizSektionHtml(detail) {
+  const notiz = detail.notiz;
+  const stand = notiz
+    ? `Gespeichert · ${lokalerTag(notiz.geaendert_utc)}, ${lokaleUhrzeit(notiz.geaendert_utc)} Uhr`
+    : "";
+  return `<section class="lupe-abschnitt">
+    <details class="notiz-bereich" data-notiz-bereich="${detail.id}"${notiz ? " open" : ""}>
+      <summary class="notiz-kopf">Meine Notizen
+        <span class="neben">privat — sieht nur du</span></summary>
+      <textarea class="notiz-text" maxlength="2000" rows="4"
+        aria-label="Private Notiz zu diesem Spiel"
+        placeholder="Gedanken zum Spiel, Bauchgefühl, Merkzettel …">${escapeHtml(notiz?.text ?? "")}</textarea>
+      <p class="notiz-status hinweis" data-notiz-status aria-live="polite">${stand}</p>
+    </details>
+  </section>`;
+}
+
+let notizTimer = null;
+
+function notizEreignisse(bereich, spielId) {
+  const feld = bereich.querySelector(".notiz-text");
+  const status = bereich.querySelector("[data-notiz-status]");
+  feld.addEventListener("input", () => {
+    status.textContent = "Speichert …";
+    clearTimeout(notizTimer);
+    notizTimer = setTimeout(async () => {
+      const text = feld.value.trim();
+      try {
+        if (!text) {
+          await api(`/api/notizen/${spielId}`, { method: "DELETE" });
+          status.textContent = "Notiz gelöscht";
+        } else {
+          const antwort = await api(`/api/notizen/${spielId}`, {
+            method: "PUT",
+            body: JSON.stringify({ text }),
+          });
+          status.textContent = `Gespeichert ✓ · ${lokaleUhrzeit(antwort.geaendert_utc)} Uhr`;
+        }
+        const spiel = zustand.spiele.find((eintrag) => eintrag.id === spielId);
+        if (spiel && spiel.hat_notiz !== !!text) {
+          spiel.hat_notiz = !!text;
+          spieleRendern(); // ✎-Marker in der Liste sofort nachführen
+        }
+      } catch {
+        status.textContent = "Speichern fehlgeschlagen — Verbindung prüfen";
+      }
+    }, 800);
+  });
 }
 
 function panelTickerHtml(detail) {
@@ -1448,6 +1504,9 @@ async function spielLupeOeffnen(spielId, startTab = null) {
     });
   }
   spielNewsLaden(detail).catch(() => {});
+
+  const notizBereich = el("lupeInhalt").querySelector("[data-notiz-bereich]");
+  if (notizBereich) notizEreignisse(notizBereich, detail.id);
 
   // Tipp-Eingabe in der Lupe
   const tippBereich = el("lupeInhalt").querySelector("[data-lupe-tipp]");
@@ -2569,6 +2628,7 @@ async function verwaltungLaden() {
   await Promise.all([
     syncStatusLaden(),
     nutzerLaden().catch(fehlerAnzeigen),
+    adminFeedbackLaden().catch(fehlerAnzeigen),
     feedsLaden().catch(fehlerAnzeigen),
     overridesLaden().catch(fehlerAnzeigen),
     adminBonusLaden().catch(fehlerAnzeigen),
@@ -2611,6 +2671,32 @@ async function nutzerLaden() {
         })
         .join("")
     : '<p class="hinweis">Noch keine Nutzer.</p>';
+}
+
+/* Posteingang der Verwaltung: Feedback/Fehlermeldungen der Nutzer (v0.1.1) */
+async function adminFeedbackLaden() {
+  const meldungen = await api("/api/admin/feedback");
+  el("feedbackListe").innerHTML = meldungen.length
+    ? meldungen
+        .map(
+          (meldung) => `<div class="verwaltungszeile feedback-eintrag${
+            meldung.status === "erledigt" ? " erledigt" : ""
+          }">
+        <span class="feedback-inhalt">
+          <span><span class="kategorie-chip ${meldung.kategorie}">${meldung.kategorie}</span>
+            <span class="neben">${escapeHtml(meldung.anzeigename)} ·
+              ${lokalerTag(meldung.erstellt_utc)}, ${lokaleUhrzeit(meldung.erstellt_utc)} Uhr</span></span>
+          <span class="feedback-text">${escapeHtml(meldung.nachricht)}</span>
+        </span>
+        <span class="fuss-knoepfe">
+          <button class="klein${meldung.status === "offen" ? " primaer" : ""}"
+            data-feedback-umschalten="${meldung.id}">
+            ${meldung.status === "offen" ? "Erledigt" : "Wieder öffnen"}</button>
+          <button class="klein gefahr" data-feedback-loeschen="${meldung.id}">Löschen</button>
+        </span></div>`
+        )
+        .join("")
+    : '<p class="hinweis">Posteingang leer — keine Meldungen.</p>';
 }
 
 async function tokensLaden() {
@@ -2769,6 +2855,35 @@ function mehrEreignisse() {
   });
   el("pushKnopf").addEventListener("click", pushUmschalten);
 
+  // Feedback/Fehler melden (v0.1.1): Kategorie-Wahl + Formular
+  el("feedbackKategorie").addEventListener("click", (ereignis) => {
+    const knopf = ereignis.target.closest("[data-kategorie]");
+    if (!knopf) return;
+    for (const anderer of el("feedbackKategorie").querySelectorAll("[data-kategorie]")) {
+      anderer.classList.toggle("aktiv", anderer === knopf);
+      anderer.setAttribute("aria-checked", anderer === knopf ? "true" : "false");
+    }
+  });
+  el("feedbackFormular").addEventListener("submit", async (ereignis) => {
+    ereignis.preventDefault();
+    const nachricht = el("feedbackText").value.trim();
+    if (!nachricht) return;
+    try {
+      await api("/api/feedback", {
+        method: "POST",
+        body: JSON.stringify({
+          kategorie:
+            el("feedbackKategorie").querySelector(".aktiv")?.dataset.kategorie ?? "sonstiges",
+          nachricht,
+        }),
+      });
+      ereignis.target.reset();
+      toast("Danke! Deine Meldung ist angekommen ✓");
+    } catch (fehler) {
+      fehlerAnzeigen(fehler);
+    }
+  });
+
   el("tokenFormular").addEventListener("submit", async (ereignis) => {
     ereignis.preventDefault();
     try {
@@ -2874,6 +2989,25 @@ function mehrEreignisse() {
         await api(`/api/admin/nutzer/${loeschKnopf.dataset.nutzerLoeschen}`, { method: "DELETE" });
         toast("Nutzer gelöscht");
         await nutzerLaden();
+      }
+    } catch (fehler) {
+      fehlerAnzeigen(fehler);
+    }
+  });
+  el("feedbackListe").addEventListener("click", async (ereignis) => {
+    const umschalter = ereignis.target.closest("[data-feedback-umschalten]");
+    const loescher = ereignis.target.closest("[data-feedback-loeschen]");
+    try {
+      if (umschalter) {
+        await api(`/api/admin/feedback/${umschalter.dataset.feedbackUmschalten}/umschalten`, {
+          method: "POST",
+        });
+        await adminFeedbackLaden();
+      } else if (loescher && confirm("Meldung endgültig löschen?")) {
+        await api(`/api/admin/feedback/${loescher.dataset.feedbackLoeschen}`, {
+          method: "DELETE",
+        });
+        await adminFeedbackLaden();
       }
     } catch (fehler) {
       fehlerAnzeigen(fehler);

@@ -9,9 +9,9 @@
 <link rel="icon" href="/icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <link rel="preload" href="/fonts/space-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/styles.css?v=21">
+<link rel="stylesheet" href="/styles.css?v=23">
 <!-- FOUC-Schutz: Modus vor dem ersten Rendern setzen; extern statt inline (CSP) -->
-<script src="/boot.js?v=21"></script>
+<script src="/boot.js?v=23"></script>
 </head>
 <body>
 <div class="app-shell">
@@ -214,6 +214,26 @@
           <p id="appVersion" class="hinweis"></p>
         </div>
         <div class="karte">
+          <h2>Feedback</h2>
+          <p class="hinweis">Fehler gefunden oder eine Idee? Schreib's hier —
+            es landet direkt beim Admin.</p>
+          <form id="feedbackFormular" class="feedback-formular">
+            <div class="segmente klein" id="feedbackKategorie" role="radiogroup"
+                 aria-label="Art der Meldung">
+              <button type="button" data-kategorie="fehler" class="aktiv"
+                      role="radio" aria-checked="true">Fehler</button>
+              <button type="button" data-kategorie="idee"
+                      role="radio" aria-checked="false">Idee</button>
+              <button type="button" data-kategorie="sonstiges"
+                      role="radio" aria-checked="false">Sonstiges</button>
+            </div>
+            <textarea id="feedbackText" maxlength="2000" rows="4" required
+              aria-label="Deine Nachricht"
+              placeholder="Was ist passiert — oder was wünschst du dir?"></textarea>
+            <button type="submit" class="primaer">Absenden</button>
+          </form>
+        </div>
+        <div class="karte">
           <h2>Punkteregeln</h2>
           <ul class="regeln">
             <li><strong>4 Punkte</strong> – exaktes Ergebnis</li>
@@ -248,6 +268,11 @@
             </div>
             <div id="syncStatus" class="sync-status"></div>
             <p id="adminMeldung" class="hinweis" hidden></p>
+          </div>
+          <div class="karte">
+            <h3>Posteingang</h3>
+            <p class="hinweis">Feedback und Fehlermeldungen aus der App.</p>
+            <div id="feedbackListe"></div>
           </div>
           <div class="karte">
             <h3>Nutzer</h3>
@@ -345,6 +370,6 @@
 
   <div id="toast" class="toast" hidden></div>
 </div>
-<script src="/app.js?v=21"></script>
+<script src="/app.js?v=23"></script>
 </body>
 </html>

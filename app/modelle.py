@@ -41,6 +41,15 @@ class TippAbgabe(BaseModel):
     tipp_gast: int = Field(ge=0, le=99)
 
 
+class NotizEingabe(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class FeedbackEingabe(BaseModel):
+    kategorie: str = Field(pattern="^(fehler|idee|sonstiges)$")
+    nachricht: str = Field(min_length=3, max_length=2000)
+
+
 class EreignisEingabe(BaseModel):
     """Manueller Ticker-Eintrag des Admins (z. B. Minute/Torschütze nachtragen)."""
 

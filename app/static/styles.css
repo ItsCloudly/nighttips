@@ -203,7 +203,8 @@ main .view:not([hidden]) { animation: view-ein 0.3s var(--ease-aus) both; }
 }
 
 select, input[type="search"], input[type="text"], input[type="password"],
-input[type="url"], input[type="number"], input[type="datetime-local"], input:not([type]) {
+input[type="url"], input[type="number"], input[type="datetime-local"], input:not([type]),
+textarea {
   background: var(--karte);
   color: var(--ink);
   border: 1px solid var(--linie);
@@ -214,9 +215,11 @@ input[type="url"], input[type="number"], input[type="datetime-local"], input:not
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
-select:focus, input:focus {
+select:focus, input:focus, textarea:focus {
   border-color: color-mix(in srgb, var(--akzent) 60%, var(--linie));
 }
+
+textarea { resize: vertical; min-height: 88px; }
 
 /* Selects ohne Browser-Grau: eigener Chevron, einheitliche Optik */
 select {
@@ -1524,6 +1527,82 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 
 .bonus-karte .frage { font-weight: 700; font-size: 1.05rem; }
 .bonus-schluss { font-size: 0.8rem; color: var(--ink-2); margin: 2px 0 10px; }
+
+/* ----- Private Spiel-Notizen (v0.1.1) ----- */
+
+.notiz-bereich { border: 0; }
+
+.notiz-kopf {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--ns-display);
+  font-weight: 600;
+}
+
+.notiz-kopf::-webkit-details-marker { display: none; }
+
+.notiz-kopf::after {
+  content: "";
+  width: 0.45em;
+  height: 0.45em;
+  border-right: 2px solid var(--ink-2);
+  border-bottom: 2px solid var(--ink-2);
+  transform: rotate(-45deg);
+  margin-left: auto;
+  align-self: center;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.notiz-bereich[open] .notiz-kopf::after { transform: rotate(45deg); }
+
+.notiz-kopf .neben { color: var(--ink-2); font-size: 0.78rem; font-weight: 500; }
+
+.notiz-text { width: 100%; margin-top: 10px; }
+
+.notiz-status { min-height: 1.2em; margin-top: 6px; }
+
+.notiz-marker { color: var(--akzent); font-style: normal; }
+
+/* ----- Feedback (Mehr-Tab + Posteingang der Verwaltung, v0.1.1) ----- */
+
+.feedback-formular {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.feedback-formular textarea { width: 100%; }
+
+.kategorie-chip {
+  display: inline-block;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  padding: 0 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: capitalize;
+}
+
+.kategorie-chip.fehler { color: var(--ns-red); }
+.kategorie-chip.idee { color: var(--ns-cyan); }
+.kategorie-chip.sonstiges { color: var(--ink-2); }
+
+.feedback-eintrag { align-items: flex-start; }
+.feedback-eintrag.erledigt .feedback-inhalt { opacity: 0.55; }
+
+.feedback-inhalt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.feedback-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .bonus-countdown {
   font-family: var(--ns-mono);
   font-variant-numeric: tabular-nums;

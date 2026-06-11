@@ -681,3 +681,49 @@ def sync_status(
 ) -> list[dict[str, Any]]:
     zeilen = conn.execute("SELECT * FROM sync_status ORDER BY job").fetchall()
     return [dict(zeile) for zeile in zeilen]
+
+
+# ---------- Feedback-Posteingang (v0.1.1) ----------
+
+
+@router.get("/feedback")
+def feedback_liste(
+    admin: Annotated[sqlite3.Row, Depends(admin_nutzer)],
+    conn: Annotated[sqlite3.Connection, Depends(get_db)],
+) -> list[dict[str, Any]]:
+    """Posteingang: offene Meldungen zuerst, innerhalb dessen neueste oben."""
+    zeilen = conn.execute(
+        "SELECT f.id, f.kategorie, f.nachricht, f.status, f.erstellt_utc, n.anzeigename"
+        " FROM feedback f JOIN nutzer n ON n.id = f.nutzer_id"
+        " ORDER BY CASE f.status WHEN 'offen' THEN 0 ELSE 1 END, f.erstellt_utc DESC, f.id DESC"
+    ).fetchall()
+    return [dict(zeile) for zeile in zeilen]
+
+
+@router.post("/feedback/{feedback_id}/umschalten")
+def feedback_umschalten(
+    feedback_id: int,
+    admin: Annotated[sqlite3.Row, Depends(admin_nutzer)],
+    conn: Annotated[sqlite3.Connection, Depends(get_db)],
+) -> dict[str, Any]:
+    with db.schreib_transaktion(conn):
+        zeile = conn.execute(
+            "SELECT status FROM feedback WHERE id = ?", (feedback_id,)
+        ).fetchone()
+        if zeile is None:
+            raise HTTPException(status_code=404, detail="Meldung nicht gefunden")
+        neuer_status = "erledigt" if zeile["status"] == "offen" else "offen"
+        conn.execute("UPDATE feedback SET status = ? WHERE id = ?", (neuer_status, feedback_id))
+    return {"id": feedback_id, "status": neuer_status}
+
+
+@router.delete("/feedback/{feedback_id}", status_code=204)
+def feedback_loeschen(
+    feedback_id: int,
+    admin: Annotated[sqlite3.Row, Depends(admin_nutzer)],
+    conn: Annotated[sqlite3.Connection, Depends(get_db)],
+) -> None:
+    with db.schreib_transaktion(conn):
+        if conn.execute("SELECT 1 FROM feedback WHERE id = ?", (feedback_id,)).fetchone() is None:
+            raise HTTPException(status_code=404, detail="Meldung nicht gefunden")
+        conn.execute("DELETE FROM feedback WHERE id = ?", (feedback_id,))

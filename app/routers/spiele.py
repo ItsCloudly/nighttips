@@ -92,11 +92,18 @@ def spiele_liste(
     ).fetchall()
     spiel_pins = {p["ref_id"] for p in pins if p["typ"] == "spiel"}
     team_pins = {p["ref_id"] for p in pins if p["typ"] == "team"}
+    notiz_spiele = {
+        zeile["spiel_id"]
+        for zeile in conn.execute(
+            "SELECT spiel_id FROM notiz WHERE nutzer_id = ?", (nutzer["id"],)
+        ).fetchall()
+    }
     spiele = []
     for zeile in zeilen:
         spiel = _spiel_json(zeile)
         spiel["gepinnt"] = zeile["id"] in spiel_pins
         spiel["team_gepinnt"] = zeile["heim_id"] in team_pins or zeile["gast_id"] in team_pins
+        spiel["hat_notiz"] = zeile["id"] in notiz_spiele
         spiele.append(spiel)
     return spiele
 
@@ -128,6 +135,13 @@ def spiel_detail(
         sql += " AND n.rolle != 'ki'"
     sql += " ORDER BY n.anzeigename COLLATE NOCASE"
     spiel["tipps"] = [dict(tipp) for tipp in conn.execute(sql, parameter).fetchall()]
+    # Private Notiz des angemeldeten Nutzers zu diesem Spiel (v0.1.1)
+    notiz = conn.execute(
+        "SELECT text, erstellt_utc, geaendert_utc FROM notiz"
+        " WHERE nutzer_id = ? AND spiel_id = ?",
+        (nutzer["id"], spiel_id),
+    ).fetchone()
+    spiel["notiz"] = dict(notiz) if notiz else None
     spiel["trainer"] = {
         "heim": _trainer_name(conn, zeile["heim_id"]),
         "gast": _trainer_name(conn, zeile["gast_id"]),
