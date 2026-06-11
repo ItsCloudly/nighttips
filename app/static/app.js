@@ -1708,6 +1708,7 @@ function teamTabHtml(team) {
 /* Kompletter Kader als Positions-Liste — geteilt zwischen Spiel-Lupe
    (Teams-Tab) und Team-Lupe. */
 function kaderListeHtml(team) {
+  if (!team.kader) return '<p class="hinweis">Noch kein Kader hinterlegt.</p>';
   const teile = [];
   const verletzt = new Map(
     (team.verletzungen ?? []).map((fall) => [fall.spieler_name, fall.status])
@@ -1898,8 +1899,8 @@ async function teamLupeOeffnen(teamId) {
 
   // Feld: übliche Startelf (sobald offizielle Aufstellungen vorliegen),
   // sonst wie bisher der komplette Kader; darunter immer die Kader-Liste.
-  if (team.kader.length) {
-    if (team.startelf) {
+  if (team.kader?.length) {
+    if (team.startelf?.spieler?.length) {
       const basis = team.startelf.spiele_basis;
       const meta = [
         team.startelf.formation ? escapeHtml(team.startelf.formation) : null,
