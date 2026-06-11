@@ -241,9 +241,10 @@ CREATE TABLE IF NOT EXISTS quote (
     id        INTEGER PRIMARY KEY,
     spiel_id  INTEGER NOT NULL REFERENCES spiel(id) ON DELETE CASCADE,
     anbieter  TEXT NOT NULL,
-    heim      REAL NOT NULL,
-    remis     REAL NOT NULL,
-    gast      REAL NOT NULL,
+    -- Dezimalquoten sind mathematisch nie unter 1.0
+    heim      REAL NOT NULL CHECK (heim >= 1.0),
+    remis     REAL NOT NULL CHECK (remis >= 1.0),
+    gast      REAL NOT NULL CHECK (gast >= 1.0),
     abruf_utc TEXT NOT NULL,
     UNIQUE (spiel_id, anbieter)
 );

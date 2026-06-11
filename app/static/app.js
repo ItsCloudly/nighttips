@@ -1349,6 +1349,10 @@ function panelTippsHtml(detail, phase) {
 function quotenSektionHtml(detail, phase) {
   const quote = detail.quote;
   if (!quote || phase !== "vor") return "";
+  // Defensive: kaputte Werte (0/negativ/NaN) lieber gar nicht zeigen
+  if ([quote.heim, quote.remis, quote.gast].some((wert) => !Number.isFinite(wert) || wert < 1)) {
+    return "";
+  }
   const implizit = (wert) => 1 / wert;
   const summe = implizit(quote.heim) + implizit(quote.remis) + implizit(quote.gast);
   const eintraege = [

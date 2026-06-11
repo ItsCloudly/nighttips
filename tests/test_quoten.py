@@ -122,6 +122,16 @@ def test_quote_im_spiel_detail(client, conn, einstellungen, welt):
     assert client.get(f"/api/spiele/{welt['gruppe_e']}").json()["quote"] is None
 
 
+def test_quoten_unter_eins_werden_verworfen(conn, einstellungen, welt):
+    """Dezimalquoten < 1.0 sind Datenmüll — der Sync überspringt sie sauber."""
+    kaputt = _event("USA", "Mexico", ANSTOSS_A)
+    kaputt["bookmakers"][0]["markets"][0]["outcomes"][1]["price"] = 0.5
+    bericht = quoten.quoten_sync(conn, einstellungen, daten=[kaputt])
+    assert bericht.ohne_quoten == 1
+    assert bericht.aktualisiert == 0
+    assert conn.execute("SELECT COUNT(*) AS anzahl FROM quote").fetchone()["anzahl"] == 0
+
+
 def test_quoten_aktiv_nur_mit_token(einstellungen):
     import dataclasses
 

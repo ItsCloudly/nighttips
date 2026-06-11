@@ -111,12 +111,18 @@ def _h2h_quoten(event: dict) -> tuple[str, float, float, float] | None:
                 eintrag.get("name"): eintrag.get("price")
                 for eintrag in markt.get("outcomes") or []
             }
-            heim = preise.get(event.get("home_team"))
-            gast = preise.get(event.get("away_team"))
-            remis = preise.get("Draw")
-            if heim and remis and gast:
+            try:
+                werte = (
+                    float(preise.get(event.get("home_team"))),
+                    float(preise.get("Draw")),
+                    float(preise.get(event.get("away_team"))),
+                )
+            except (TypeError, ValueError):
+                continue
+            # Dezimalquoten < 1.0 sind Datenmüll — überspringen statt speichern
+            if min(werte) >= 1.0:
                 anbieter = buchmacher.get("title") or buchmacher.get("key") or "?"
-                return (str(anbieter), float(heim), float(remis), float(gast))
+                return (str(anbieter), *werte)
     return None
 
 
