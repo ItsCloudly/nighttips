@@ -226,11 +226,19 @@ def deltas_verarbeiten(
         if alt is None or neu is None:
             continue
         if neu > alt:
-            text = f"Tor für {team_name or '?'} — Stand {stand}"
-            # Dedup-Prüfung VOR der Schleife: ein Doppelpack erzeugt bewusst
-            # zwei gleichlautende Einträge in derselben Transaktion.
-            if not _kuerzlich_vorhanden(conn, spiel_id, "tor", text):
-                for _ in range(neu - alt):
+            # Stand je Tor inkrementell: ein Doppelpack zwischen zwei Polls
+            # zeigt „1:0“, dann „2:0“ — nicht zweimal den Endstand. Die
+            # Dedup-Prüfung läuft VOR der Schleife gegen den ersten Eintrag.
+            def tor_text(tore: int) -> str:
+                zwischenstand = (
+                    f"{tore}:{spiel['tore_gast']}"
+                    if feld == "tore_heim"
+                    else f"{spiel['tore_heim']}:{tore}"
+                )
+                return f"Tor für {team_name or '?'} — Stand {zwischenstand}"
+
+            if not _kuerzlich_vorhanden(conn, spiel_id, "tor", tor_text(alt + 1)):
+                for schritt in range(neu - alt):
                     neue_ids.append(
                         ereignis_anlegen(
                             conn,
@@ -238,7 +246,7 @@ def deltas_verarbeiten(
                             typ="tor",
                             minute=minute,
                             team_id=spiel[team_feld],
-                            text=text,
+                            text=tor_text(alt + schritt + 1),
                         )
                     )
         else:

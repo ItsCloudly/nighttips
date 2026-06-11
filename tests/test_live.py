@@ -48,10 +48,14 @@ def test_sync_leitet_ereignisse_aus_deltas_ab(conn, einstellungen):
     assert "1:0" in tor["text"]
 
     # Doppelpack im selben Poll-Intervall: 1:0 -> 1:2 ergibt zwei Tor-Ereignisse
+    # mit Zwischenständen (1:1, dann 1:2) statt zweimal dem Endstand
     api = ApiAttrappe(API_TEAMS, [_match_mit("IN_PLAY", (1, 2), minute=70)])
     bericht = sync.ergebnis_sync(conn, einstellungen, api=api)
     assert bericht.ereignisse == 2
-    assert [e["typ"] for e in _ereignisse(conn)[-2:]] == ["tor", "tor"]
+    doppelpack = _ereignisse(conn)[-2:]
+    assert [e["typ"] for e in doppelpack] == ["tor", "tor"]
+    assert "1:1" in doppelpack[0]["text"]
+    assert "1:2" in doppelpack[1]["text"]
 
     # VAR-Korrektur: Tor zurückgenommen — zählt erst, wenn der Folgelauf
     # den niedrigeren Stand bestätigt (Schutz gegen API-Flattern)

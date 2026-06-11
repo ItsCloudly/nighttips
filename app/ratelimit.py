@@ -37,6 +37,8 @@ def erlaubt(schluessel: str, *, limit: int, fenster_sekunden: float) -> bool:
     """True, wenn unter dem Limit (und zählt den Treffer); False, wenn überschritten.
 
     Gleitendes Fenster: erlaubt höchstens `limit` Treffer je `fenster_sekunden`.
+    Konvention: Ein Schlüssel(-Präfix) verwendet immer dieselbe Fenstergröße —
+    bei wechselnden Werten gewinnt für die Reinigung der zuletzt verwendete.
     """
     if limit <= 0:
         return True
