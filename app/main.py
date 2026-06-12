@@ -16,6 +16,7 @@ from .routers import (
     admin,
     agenten,
     auth,
+    chat,
     feedback,
     news_bonus,
     notizen,
@@ -102,6 +103,7 @@ def create_app(einstellungen: Einstellungen | None = None) -> FastAPI:
     app.include_router(feedback.router)
     app.include_router(profil.router)
     app.include_router(agenten.router)
+    app.include_router(chat.router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

@@ -1484,6 +1484,127 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 
 .favorit-stern { color: var(--gold); font-size: 0.92rem; line-height: 1; }
 
+/* ----- Gruppenchat (v0.2) ----- */
+
+/* Runder Sprechblasen-Knopf rechts neben der Zeitraum-Pille */
+.chat-knopf {
+  margin-left: auto;
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.chat-knopf svg { width: 19px; height: 19px; }
+
+.chat-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  padding: 1px 4px;
+  border-radius: 999px;
+  background: var(--ns-red);
+  color: #fff;
+  font-size: 0.64rem;
+  font-weight: 800;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.chat { display: flex; flex-direction: column; min-height: 55dvh; }
+.chat-titel { margin: 0 0 10px; }
+
+.chat-verlauf {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 8px;
+}
+
+.chat-tag {
+  align-self: center;
+  font-family: var(--ns-mono);
+  font-size: 0.68rem;
+  color: var(--ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--karte) 80%, transparent);
+}
+
+.chat-aeltere { align-self: center; }
+
+.chat-nachricht { display: flex; gap: 8px; align-items: flex-end; max-width: 88%; }
+.chat-nachricht.eigene { align-self: flex-end; flex-direction: row-reverse; }
+
+.chat-avatar { width: 28px; height: 28px; font-size: 0.8rem; }
+
+.chat-blase {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 12px;
+  border-radius: 16px 16px 16px 5px;
+  background: var(--karte);
+  border: 1px solid var(--linie);
+  min-width: 90px;
+}
+
+.chat-nachricht.eigene .chat-blase {
+  border-radius: 16px 16px 5px 16px;
+  background: color-mix(in srgb, var(--akzent) 16%, var(--karte));
+  border-color: color-mix(in srgb, var(--akzent) 35%, var(--linie));
+}
+
+.chat-name { font-size: 0.74rem; font-weight: 700; color: var(--ns-cyan); }
+.chat-text { overflow-wrap: anywhere; white-space: pre-wrap; }
+.chat-zeit { font-family: var(--ns-mono); font-size: 0.62rem; color: var(--ink-2); align-self: flex-end; }
+
+.chat-reaktionen { display: flex; flex-wrap: wrap; gap: 4px; }
+.chat-reaktionen:empty { display: none; }
+
+.chat-chip {
+  padding: 1px 8px;
+  min-height: 24px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: color-mix(in srgb, var(--karte-hoch) 70%, transparent);
+}
+
+.chat-chip span { font-family: var(--ns-mono); font-size: 0.68rem; color: var(--ink-2); }
+
+.chat-chip.aktiv {
+  border-color: var(--ns-green);
+  background: color-mix(in srgb, var(--ns-green) 18%, var(--karte));
+}
+
+.chat-chip.plus { color: var(--ink-2); }
+
+/* Eingabezeile klebt unten im scrollenden Lupen-Blatt */
+.chat-eingabe {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding: 10px 0 2px;
+  background: linear-gradient(0deg, var(--ns-bg) 78%, transparent);
+}
+
+.chat-eingabe input { flex: 1; min-width: 0; }
+.chat-eingabe button { flex-shrink: 0; width: 46px; padding: 0; }
+
 /* ----- Lupe (Detail-Overlay als Bottom-Sheet) ----- */
 
 .lupe { position: fixed; inset: 0; z-index: 60; }

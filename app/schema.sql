@@ -430,3 +430,20 @@ CREATE TABLE IF NOT EXISTS sync_status (
     status              TEXT,
     detail              TEXT
 );
+
+-- Gruppenchat (v0.2): eine Unterhaltung fuer die ganze Tipprunde.
+CREATE TABLE IF NOT EXISTS nachricht (
+    id           INTEGER PRIMARY KEY,
+    nutzer_id    INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE,
+    inhalt       TEXT NOT NULL,
+    erstellt_utc TEXT NOT NULL
+);
+
+-- Eine Reaktion je Nutzer und Nachricht; neues Emoji ersetzt das alte.
+CREATE TABLE IF NOT EXISTS nachricht_reaktion (
+    nachricht_id INTEGER NOT NULL REFERENCES nachricht(id) ON DELETE CASCADE,
+    nutzer_id    INTEGER NOT NULL REFERENCES nutzer(id) ON DELETE CASCADE,
+    emoji        TEXT NOT NULL,
+    erstellt_utc TEXT NOT NULL,
+    PRIMARY KEY (nachricht_id, nutzer_id)
+);

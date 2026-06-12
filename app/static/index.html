@@ -9,9 +9,9 @@
 <link rel="icon" href="/icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <link rel="preload" href="/fonts/space-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/styles.css?v=39">
+<link rel="stylesheet" href="/styles.css?v=40">
 <!-- FOUC-Schutz: Modus vor dem ersten Rendern setzen; extern statt inline (CSP) -->
-<script src="/boot.js?v=39"></script>
+<script src="/boot.js?v=40"></script>
 </head>
 <body>
 <div class="app-shell">
@@ -168,6 +168,11 @@
             <button data-zeitraum="runde" role="tab" aria-selected="false">Runde</button>
           </div>
           <select id="ranglisteRunde" aria-label="Runde wählen" hidden></select>
+          <button type="button" id="chatKnopf" class="chat-knopf" aria-label="Gruppenchat öffnen"
+                  title="Gruppenchat">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7A3.5 3.5 0 0 1 7.5 3.5h9A3.5 3.5 0 0 1 20 7v5.5a3.5 3.5 0 0 1-3.5 3.5H10l-4.2 3.3c-.66.52-1.63.05-1.63-.79z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            <span id="chatBadge" class="chat-badge" hidden></span>
+          </button>
         </div>
       </header>
       <div id="podium" class="podium" hidden></div>
@@ -469,6 +474,6 @@
 
   <div id="toast" class="toast" hidden></div>
 </div>
-<script src="/app.js?v=39"></script>
+<script src="/app.js?v=40"></script>
 </body>
 </html>

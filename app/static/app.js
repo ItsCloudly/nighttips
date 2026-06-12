@@ -323,6 +323,14 @@ function liveVerbinden() {
     const daten = JSON.parse(e.data);
     if (zustand.lupeSpielId === daten.spiel_id) tickerEintragEinfuegen(daten);
   });
+  // Gruppenchat (v0.2): neue Nachrichten und Reaktions-Updates live
+  quelle.addEventListener("chat", (e) => {
+    chatEingegangen(JSON.parse(e.data));
+  });
+  quelle.addEventListener("chat_reaktion", (e) => {
+    const daten = JSON.parse(e.data);
+    chatReaktionenAktualisieren(daten.nachricht_id, daten.reaktionen);
+  });
   quelle.onerror = () => {
     /* EventSource verbindet selbst neu (retry); kein Handlungsbedarf */
   };
@@ -1229,9 +1237,47 @@ function lupeZiehenEinrichten() {
 
 function lupeEreignisse() {
   lupeZiehenEinrichten();
+  // Gruppenchat: Senden per Enter/Knopf (delegiert, das Formular entsteht dynamisch)
+  el("lupeInhalt").addEventListener("submit", (ereignis) => {
+    const formular = ereignis.target.closest("[data-chat-formular]");
+    if (!formular) return;
+    ereignis.preventDefault();
+    chatSenden(formular);
+  });
   el("lupe").addEventListener("click", (ereignis) => {
     if (ereignis.target.closest("[data-lupe-schliessen]")) {
       lupeSchliessen();
+      return;
+    }
+    // Gruppenchat: Reaktions-Chips, Emoji-Palette, ältere Nachrichten
+    const chatChip = ereignis.target.closest("[data-chat-reagieren]");
+    if (chatChip) {
+      chatReagieren(
+        Number(chatChip.dataset.chatReagieren),
+        chatChip.dataset.emoji,
+        chatChip.classList.contains("aktiv")
+      ).catch(fehlerAnzeigen);
+      return;
+    }
+    const paletteAuf = ereignis.target.closest("[data-chat-palette]");
+    if (paletteAuf) {
+      paletteAuf.closest("[data-chat-reaktionen]").innerHTML = chatPaletteHtml(
+        Number(paletteAuf.dataset.chatPalette)
+      );
+      return;
+    }
+    const paletteZu = ereignis.target.closest("[data-chat-palette-zu]");
+    if (paletteZu) {
+      const container = paletteZu.closest("[data-chat-reaktionen]");
+      container.innerHTML = chatChipsHtml(
+        Number(paletteZu.dataset.chatPaletteZu),
+        JSON.parse(container.dataset.stand || "[]")
+      );
+      return;
+    }
+    const aeltereKnopf = ereignis.target.closest("[data-chat-aeltere]");
+    if (aeltereKnopf) {
+      chatAeltereLaden(aeltereKnopf).catch(fehlerAnzeigen);
       return;
     }
     const readerAa = ereignis.target.closest("[data-reader-aa]");
@@ -3166,7 +3212,213 @@ function bonusEreignisse() {
   });
 }
 
+/* ---------- Gruppenchat (v0.2) ----------
+
+   Eine Unterhaltung für die ganze Tipprunde, als Vollbild-Lupe über der
+   Rangliste. Live über die vorhandene SSE-Verbindung (Events „chat" und
+   „chat_reaktion"); der Ungelesen-Zähler lebt in localStorage. */
+
+let chatEmojis = ["👍", "❤️", "😂", "😮", "⚽", "🍺"];
+let chatUngelesen = 0;
+let chatAeltesteId = null;
+
+function chatGelesenId() {
+  return Number(localStorage.getItem("chatGelesenId") || 0);
+}
+
+function chatGelesenMerken(id) {
+  if (id > chatGelesenId()) localStorage.setItem("chatGelesenId", String(id));
+}
+
+function chatBadgeAktualisieren() {
+  const badge = el("chatBadge");
+  if (!badge) return;
+  badge.hidden = chatUngelesen <= 0;
+  badge.textContent = chatUngelesen > 9 ? "9+" : String(chatUngelesen);
+}
+
+/* Ungelesen-Zähler beim Start/Ranglisten-Besuch frisch rechnen (die letzten
+   50 reichen — mehr passt eh nicht auf den Badge). */
+async function chatBadgeLaden() {
+  try {
+    const daten = await api("/api/chat?limit=50");
+    const gelesen = chatGelesenId();
+    chatUngelesen = daten.nachrichten.filter(
+      (n) => n.id > gelesen && n.nutzer_id !== zustand.nutzer?.id
+    ).length;
+    chatBadgeAktualisieren();
+  } catch {
+    /* Badge ist Komfort — Fehler still schlucken */
+  }
+}
+
+function chatVerlaufElement() {
+  return el("lupeInhalt").querySelector("[data-chat-verlauf]");
+}
+
+function chatChipsHtml(nachrichtId, reaktionen) {
+  const meineId = zustand.nutzer?.id;
+  const chips = (reaktionen ?? []).map(
+    (r) => `<button type="button" class="chat-chip${
+      r.nutzer_ids?.includes(meineId) ? " aktiv" : ""
+    }" data-chat-reagieren="${nachrichtId}" data-emoji="${escapeHtml(r.emoji)}">${escapeHtml(
+      r.emoji
+    )}<span>${r.anzahl}</span></button>`
+  );
+  chips.push(`<button type="button" class="chat-chip plus" data-chat-palette="${nachrichtId}"
+    aria-label="Mit Emoji reagieren">+</button>`);
+  return chips.join("");
+}
+
+function chatPaletteHtml(nachrichtId) {
+  return (
+    chatEmojis
+      .map(
+        (emoji) => `<button type="button" class="chat-chip" data-chat-reagieren="${nachrichtId}"
+          data-emoji="${escapeHtml(emoji)}">${escapeHtml(emoji)}</button>`
+      )
+      .join("") +
+    `<button type="button" class="chat-chip plus" data-chat-palette-zu="${nachrichtId}"
+      aria-label="Palette schließen">✕</button>`
+  );
+}
+
+function chatReaktionenAktualisieren(nachrichtId, reaktionen) {
+  const zeile = document.querySelector(
+    `[data-chat-id="${nachrichtId}"] [data-chat-reaktionen]`
+  );
+  if (!zeile) return;
+  zeile.dataset.stand = JSON.stringify(reaktionen ?? []);
+  zeile.innerHTML = chatChipsHtml(nachrichtId, reaktionen);
+}
+
+function chatNachrichtHtml(n) {
+  const eigene = n.nutzer_id === zustand.nutzer?.id;
+  const ki = n.rolle === "ki" ? ' <span class="ki">KI</span>' : "";
+  const stand = escapeHtml(JSON.stringify(n.reaktionen ?? []));
+  return `<div class="chat-nachricht${eigene ? " eigene" : ""}" data-chat-id="${n.id}"
+      data-chat-tag="${escapeHtml(lokalerTag(n.erstellt_utc))}">
+    ${eigene ? "" : avatarHtml(n, "tipper-avatar chat-avatar")}
+    <div class="chat-blase">
+      ${eigene ? "" : `<span class="chat-name">${escapeHtml(n.anzeigename)}${ki}</span>`}
+      <span class="chat-text">${escapeHtml(n.inhalt)}</span>
+      <span class="chat-zeit">${lokaleUhrzeit(n.erstellt_utc)} Uhr</span>
+      <div class="chat-reaktionen" data-chat-reaktionen data-stand="${stand}">${chatChipsHtml(
+        n.id,
+        n.reaktionen
+      )}</div>
+    </div>
+  </div>`;
+}
+
+function chatVerlaufHtml(nachrichten) {
+  const teile = [];
+  let letzterTag = "";
+  for (const n of nachrichten) {
+    const tag = lokalerTag(n.erstellt_utc);
+    if (tag !== letzterTag) {
+      teile.push(`<div class="chat-tag">${escapeHtml(tag)}</div>`);
+      letzterTag = tag;
+    }
+    teile.push(chatNachrichtHtml(n));
+  }
+  return teile.join("");
+}
+
+function chatAnsEndeScrollen() {
+  const inhalt = el("lupeInhalt");
+  inhalt.scrollTop = inhalt.scrollHeight;
+}
+
+async function chatOeffnen() {
+  const daten = await api("/api/chat");
+  chatEmojis = daten.emojis ?? chatEmojis;
+  chatAeltesteId = daten.nachrichten[0]?.id ?? null;
+  const aeltere = daten.aeltere_vorhanden
+    ? '<button type="button" class="klein chat-aeltere" data-chat-aeltere>Ältere Nachrichten laden</button>'
+    : "";
+  const leer = daten.nachrichten.length
+    ? ""
+    : '<p class="hinweis zentriert">Noch ganz still hier — schreib die erste Nachricht!</p>';
+  lupeOeffnen(`<div class="chat">
+    <h2 class="chat-titel">Gruppenchat</h2>
+    <div class="chat-verlauf" data-chat-verlauf>${aeltere}${leer}${chatVerlaufHtml(daten.nachrichten)}</div>
+    <form class="chat-eingabe" data-chat-formular>
+      <input type="text" maxlength="500" placeholder="Nachricht an die Runde …"
+        aria-label="Nachricht schreiben" autocomplete="off" enterkeyhint="send">
+      <button type="submit" class="primaer" aria-label="Senden">➤</button>
+    </form>
+  </div>`);
+  const neueste = daten.nachrichten[daten.nachrichten.length - 1];
+  if (neueste) chatGelesenMerken(neueste.id);
+  chatUngelesen = 0;
+  chatBadgeAktualisieren();
+  chatAnsEndeScrollen();
+}
+
+/* Block älterer Nachrichten oben anfügen (Scroll-Position halten). */
+async function chatAeltereLaden(knopf) {
+  if (!chatAeltesteId) return;
+  const daten = await api(`/api/chat?vor_id=${chatAeltesteId}`);
+  chatAeltesteId = daten.nachrichten[0]?.id ?? chatAeltesteId;
+  const verlauf = chatVerlaufElement();
+  const inhalt = el("lupeInhalt");
+  const vorher = inhalt.scrollHeight;
+  knopf.remove();
+  verlauf.insertAdjacentHTML(
+    "afterbegin",
+    (daten.aeltere_vorhanden
+      ? '<button type="button" class="klein chat-aeltere" data-chat-aeltere>Ältere Nachrichten laden</button>'
+      : "") + chatVerlaufHtml(daten.nachrichten)
+  );
+  inhalt.scrollTop += inhalt.scrollHeight - vorher;
+}
+
+/* Neue Nachricht einsortieren — egal ob aus eigenem POST oder via SSE. */
+function chatEingegangen(n) {
+  const verlauf = chatVerlaufElement();
+  if (!verlauf) {
+    if (n.nutzer_id !== zustand.nutzer?.id) {
+      chatUngelesen += 1;
+      chatBadgeAktualisieren();
+    }
+    return;
+  }
+  if (verlauf.querySelector(`[data-chat-id="${n.id}"]`)) return;
+  const inhalt = el("lupeInhalt");
+  const nahUnten = inhalt.scrollHeight - inhalt.scrollTop - inhalt.clientHeight < 140;
+  const letzte = [...verlauf.querySelectorAll(".chat-nachricht")].pop();
+  const tag = lokalerTag(n.erstellt_utc);
+  const trenner = letzte?.dataset.chatTag === tag ? "" : `<div class="chat-tag">${escapeHtml(tag)}</div>`;
+  verlauf.insertAdjacentHTML("beforeend", trenner + chatNachrichtHtml(n));
+  if (nahUnten || n.nutzer_id === zustand.nutzer?.id) chatAnsEndeScrollen();
+  chatGelesenMerken(n.id);
+}
+
+async function chatSenden(formular) {
+  const feld = formular.querySelector("input");
+  const text = feld.value.trim();
+  if (!text) return;
+  feld.value = "";
+  try {
+    const n = await api("/api/chat", { method: "POST", body: JSON.stringify({ inhalt: text }) });
+    chatEingegangen(n);
+  } catch (fehler) {
+    feld.value = text; // nichts verlieren — z. B. beim Ratelimit
+    fehlerAnzeigen(fehler);
+  }
+}
+
+async function chatReagieren(nachrichtId, emoji, warAktiv) {
+  const antwort = await api(
+    `/api/chat/${nachrichtId}/reaktion`,
+    warAktiv ? { method: "DELETE" } : { method: "PUT", body: JSON.stringify({ emoji }) }
+  );
+  chatReaktionenAktualisieren(nachrichtId, antwort.reaktionen);
+}
+
 function ranglisteEreignisse() {
+  el("chatKnopf").addEventListener("click", () => chatOeffnen().catch(fehlerAnzeigen));
   for (const knopf of document.querySelectorAll("#view-rangliste .segmente button")) {
     knopf.addEventListener("click", () => {
       zustand.zeitraum = knopf.dataset.zeitraum;
@@ -4146,6 +4398,7 @@ async function appStarten(zielAnsicht = "heute") {
   liveVerbinden();
   wettbewerbeLaden().catch(() => {});
   pushStatusLaden().catch(() => {});
+  chatBadgeLaden();
   // Push-Klick auf /#spiel-ID: passende Lupe öffnen
   const treffer = location.hash.match(/^#spiel-(\d+)$/);
   if (treffer) {
