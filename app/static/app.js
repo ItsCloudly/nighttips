@@ -838,16 +838,17 @@ function heuteHeroHtml(spiel, istLive) {
         spiel.stadion
       )}</span></div>`
     : `<div class="hero-meta">${escapeHtml(spiel.runde)}</div>`;
-  // Kein <button> mehr: die Flaggen darin sind eigene Knöpfe, und Knöpfe
-  // dürfen nicht geschachtelt werden. role="button" + Enter/Space-Handler
-  // (heuteEreignisse) halten die Tastatur-Bedienung intakt.
-  return `<div class="heute-hero" role="button" tabindex="0" data-spiel-lupe="${spiel.id}"
-      ${istLive ? "" : `data-anstoss="${spiel.anstoss_utc}"`}
-      aria-label="Zum Spiel ${escapeHtml(spiel.heim?.name ?? "?")} gegen ${escapeHtml(spiel.gast?.name ?? "?")}">
+  // Kein interaktiver Container (Screenreader verflachen Knöpfe in Knöpfen):
+  // der Hero ist ein einfaches div, die Flaggen und die Mitte sind echte
+  // GESCHWISTER-Knöpfe. Klicks auf die restliche Fläche fängt weiterhin die
+  // Delegation über data-spiel-lupe ab.
+  return `<div class="heute-hero" data-spiel-lupe="${spiel.id}"
+      ${istLive ? "" : `data-anstoss="${spiel.anstoss_utc}"`}>
     ${metaZeile}
     <div class="hero-duell">
       ${heroTeamHtml(spiel.heim)}
-      <div class="hero-mitte">${mitte}</div>
+      <button type="button" class="hero-mitte" data-spiel-lupe="${spiel.id}"
+        aria-label="Zum Spiel ${escapeHtml(spiel.heim?.name ?? "?")} gegen ${escapeHtml(spiel.gast?.name ?? "?")}">${mitte}</button>
       ${heroTeamHtml(spiel.gast)}
     </div>
   </div>`;
@@ -946,13 +947,16 @@ async function tagessiegerLaden() {
   const namen = beste.map((eintrag) => eintrag.anzeigename);
   const label =
     namen.length <= 2 ? namen.join(" & ") : `${namen.length} Tipper im Gleichstand`;
+  const inhalt = `<span class="tagessieger-pokal" aria-hidden="true">🏆</span>
+      <span class="tagessieger-text"><strong>${namen.length > 1 ? "Tagessieger:innen gestern" : "Tagessieger gestern"}</strong><br>
+        <span class="hinweis-zeile">${escapeHtml(label)} · +${beste[0].punkte} Punkte</span></span>`;
+  // Nur bei EINEM Sieger aufs Profil verlinken — bei Gleichstand wäre der
+  // Sprung auf das erstbeste Profil irreführend.
   htmlAktualisieren(
     slot,
-    `<button type="button" class="karte tagessieger-chip" data-profil-direkt="${beste[0].nutzer_id}">
-      <span class="tagessieger-pokal" aria-hidden="true">🏆</span>
-      <span class="tagessieger-text"><strong>Tagessieger gestern</strong><br>
-        <span class="hinweis-zeile">${escapeHtml(label)} · +${beste[0].punkte} Punkte</span></span>
-    </button>`
+    beste.length === 1
+      ? `<button type="button" class="karte tagessieger-chip" data-profil-direkt="${beste[0].nutzer_id}">${inhalt}</button>`
+      : `<div class="karte tagessieger-chip">${inhalt}</div>`
   );
 }
 
@@ -1152,19 +1156,6 @@ function spieleEreignisse() {
 }
 
 function heuteEreignisse() {
-  // Tastatur-Ersatz für den Hero (div mit role="button"): Enter/Space öffnen
-  // das Spiel wie ein Klick.
-  el("heuteInhalt").addEventListener("keydown", (ereignis) => {
-    if (ereignis.key !== "Enter" && ereignis.key !== " ") return;
-    // Echte Knöpfe (z. B. die Flaggen im Hero) aktivieren sich selbst —
-    // hier nur den Hero-div bedienen, sonst öffnete Enter auf der Flagge
-    // das Spiel statt der Teaminfo.
-    if (ereignis.target.closest("button")) return;
-    const ziel = ereignis.target.closest('[role="button"][data-spiel-lupe]');
-    if (!ziel) return;
-    ereignis.preventDefault();
-    spielLupeOeffnen(Number(ziel.dataset.spielLupe)).catch(fehlerAnzeigen);
-  });
   el("heuteInhalt").addEventListener("input", (ereignis) => {
     const eingabe = ereignis.target.closest(".tipp-eingabe");
     if (!eingabe) return;
@@ -3357,12 +3348,18 @@ let chatEmojis = ["👍", "❤️", "😂", "😮", "⚽", "🍺"];
 let chatUngelesen = 0;
 let chatAeltesteId = null;
 
+// Lesemarke je Nutzer: melden sich zwei Personen am selben Gerät an,
+// erbt sonst die zweite den Lesestand der ersten.
+function chatGelesenSchluessel() {
+  return `chatGelesenId:${zustand.nutzer?.id ?? 0}`;
+}
+
 function chatGelesenId() {
-  return Number(localStorage.getItem("chatGelesenId") || 0);
+  return Number(localStorage.getItem(chatGelesenSchluessel()) || 0);
 }
 
 function chatGelesenMerken(id) {
-  if (id > chatGelesenId()) localStorage.setItem("chatGelesenId", String(id));
+  if (id > chatGelesenId()) localStorage.setItem(chatGelesenSchluessel(), String(id));
 }
 
 function chatBadgeAktualisieren() {
