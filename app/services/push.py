@@ -1,6 +1,6 @@
 """Web-Push-Versand (SPEC 5.5): VAPID-signierte Nachrichten an Abos.
 
-Anlässe für gepinnte Spiele/Teams: Anpfiff in N Minuten, Tor, Endstand.
+Anlässe für Lieblings-Teams (v0.2): Anpfiff in N Minuten, Tor, Endstand.
 Für alle Nutzer: Tipp-Erinnerung, wenn ein ungetipptes Spiel bald beginnt.
 Doppelversand verhindert die Tabelle push_versand (Anlass + Bezug + Nutzer).
 
@@ -138,11 +138,15 @@ def _spiel_info(conn: sqlite3.Connection, spiel_id: int) -> sqlite3.Row | None:
 
 
 def _pin_nutzer(conn: sqlite3.Connection, spiel: sqlite3.Row) -> list[int]:
-    """Nutzer, die das Spiel oder eines der beteiligten Teams gepinnt haben."""
+    """Nutzer, die eines der beteiligten Teams als Favorit markiert haben.
+
+    v0.2: Favoriten sind Teams — alte Spiel-Pins liegen zwar noch in der
+    Tabelle, lösen aber bewusst keine Pushes mehr aus (die UI bietet sie
+    nicht mehr an, niemand könnte sie abbestellen).
+    """
     zeilen = conn.execute(
-        "SELECT DISTINCT nutzer_id FROM pin WHERE (typ = 'spiel' AND ref_id = ?)"
-        " OR (typ = 'team' AND ref_id IN (?, ?))",
-        (spiel["id"], spiel["heim_team_id"] or -1, spiel["gast_team_id"] or -1),
+        "SELECT DISTINCT nutzer_id FROM pin WHERE typ = 'team' AND ref_id IN (?, ?)",
+        (spiel["heim_team_id"] or -1, spiel["gast_team_id"] or -1),
     ).fetchall()
     return [zeile["nutzer_id"] for zeile in zeilen]
 

@@ -343,7 +343,7 @@ async function pinUmschalten(typ, refId) {
     if (gesetzt) zustand.pins[typ].delete(refId);
     else zustand.pins[typ].add(refId);
     if (!gesetzt && Notification?.permission === "default" && !zustand.pushAktiv) {
-      toast("Tipp: Aktiviere Push unter „Mehr“ für Tor-Alarme 📣");
+      toast("Tipp: Aktiviere Push unter „Mehr“ — Anstoß- und Tor-Alarm für deine Teams 📣");
     }
   } catch (fehler) {
     fehlerAnzeigen(fehler);
@@ -351,10 +351,13 @@ async function pinUmschalten(typ, refId) {
 }
 
 function pinKnopf(typ, refId) {
+  // Seit v0.2 nur noch für Teams im Einsatz (Lieblings-Teams) — Spiele
+  // lassen sich nicht mehr einzeln pinnen.
   const gesetzt = zustand.pins[typ].has(refId);
+  const label = gesetzt ? "Lieblings-Team entfernen" : "Als Lieblings-Team merken";
   return `<button class="pin-knopf${gesetzt ? " gepinnt" : ""}" data-pin-typ="${typ}"
-    data-pin-ref="${refId}" aria-label="${gesetzt ? "Pin entfernen" : "Pinnen"}"
-    title="${gesetzt ? "Pin entfernen" : "Pinnen"}">${gesetzt ? "★" : "☆"}</button>`;
+    data-pin-ref="${refId}" aria-label="${label}"
+    title="${label}">${gesetzt ? "★" : "☆"}</button>`;
 }
 
 /* ---------- Spiele ---------- */
@@ -455,11 +458,10 @@ function teamFilterWahlOeffnen() {
 }
 
 function spielIstGepinnt(spiel) {
-  return (
-    zustand.pins.spiel.has(spiel.id) ||
-    zustand.pins.team.has(spiel.heim?.id) ||
-    zustand.pins.team.has(spiel.gast?.id)
-  );
+  // v0.2: Favoriten sind TEAMS, keine Einzelspiele mehr. Alte Spiel-Pins
+  // bleiben in der DB, sind aber stillgelegt — Hervorhebung und Pushes
+  // richten sich nur noch nach den Lieblings-Teams.
+  return zustand.pins.team.has(spiel.heim?.id) || zustand.pins.team.has(spiel.gast?.id);
 }
 
 function lokalesDatum(isoUtc) {
@@ -664,13 +666,16 @@ function spielKarte(spiel, flashId) {
 
   // Die ganze Karte öffnet das Spiel (kein „Details“-Knopf mehr, v0.2);
   // die Kopfzeile ist der fokussierbare Anker für die Tastatur.
-  const favorit = spielIstGepinnt(spiel) ? " favorit" : "";
-  return `<article class="karte spiel${favorit}" data-spiel="${spiel.id}">
+  const istFavorit = spielIstGepinnt(spiel);
+  const stern = istFavorit
+    ? '<span class="favorit-stern" title="Spiel deines Teams" aria-hidden="true">★</span>'
+    : "";
+  return `<article class="karte spiel${istFavorit ? " favorit" : ""}" data-spiel="${spiel.id}">
     <div class="spiel-kopf">
       <button class="links spiel-kopf-knopf" data-spiel-lupe="${spiel.id}"
         aria-label="Spiel öffnen: ${escapeHtml(spiel.heim?.name ?? "?")} gegen ${escapeHtml(spiel.gast?.name ?? "?")}">
         ${kopfTeile.join(" · ")}</button>
-      <span class="links">${badge}${pinKnopf("spiel", spiel.id)}</span>
+      <span class="links">${badge}${stern}</span>
     </div>
     <div class="duell">
       ${duellTeamHtml(spiel.heim)}
@@ -955,7 +960,13 @@ function spieleRendern(flashId = null) {
   const standardFilter =
     zustand.filterStatus === "alle" && !zustand.filterGruppe && !zustand.filterTeam;
   if (!spiele.length) {
-    if (zustand.filterStatus === "live") {
+    if (zustand.filterStatus === "gepinnt") {
+      htmlAktualisieren(liste, emptyStateHtml(
+        "hero-team-pick",
+        "Noch keine Lieblings-Teams",
+        "Tippe auf eine Flagge und markiere dein Team mit ☆ — seine Spiele werden hervorgehoben und du bekommst Anstoß- und Tor-Push."
+      ));
+    } else if (zustand.filterStatus === "live") {
       htmlAktualisieren(liste, emptyStateHtml(
         "empty-no-live",
         "Gerade kein Live-Spiel",
@@ -977,11 +988,11 @@ function spieleRendern(flashId = null) {
     return;
   }
   const stuecke = [];
-  // Gepinnte Sektion oben (SPEC 5.1), nur in der Standardansicht
+  // Spiele der Lieblings-Teams oben (SPEC 5.1), nur in der Standardansicht
   if (standardFilter && zustand.spieleTag === "alle") {
     const gepinnt = spiele.filter((s) => spielIstGepinnt(s) && !istVorbei(s));
     if (gepinnt.length) {
-      stuecke.push('<h2 class="tages-titel">★ Gepinnt</h2>');
+      stuecke.push('<h2 class="tages-titel">★ Meine Teams</h2>');
       for (const spiel of gepinnt) stuecke.push(spielKarte(spiel, flashId));
     }
   }
@@ -1051,11 +1062,6 @@ function spieleEreignisse() {
     const speichern = ereignis.target.closest(".tipp-speichern");
     if (speichern) {
       tippSpeichern(Number(speichern.dataset.spiel), speichern.closest(".spiel"));
-      return;
-    }
-    const pin = ereignis.target.closest(".pin-knopf");
-    if (pin) {
-      pinUmschalten(pin.dataset.pinTyp, Number(pin.dataset.pinRef)).then(() => spieleRendern());
       return;
     }
     const team = ereignis.target.closest("[data-team-lupe]");
@@ -1128,11 +1134,6 @@ function heuteEreignisse() {
       tippSpeichern(Number(speichern.dataset.spiel), speichern.closest(".spiel")).then(() =>
         heuteRendern()
       );
-      return;
-    }
-    const pin = ereignis.target.closest(".pin-knopf");
-    if (pin) {
-      pinUmschalten(pin.dataset.pinTyp, Number(pin.dataset.pinRef)).then(() => heuteRendern());
       return;
     }
     // Flaggen vor dem Hero prüfen: der Flaggen-Knopf liegt IM Hero-Panel —

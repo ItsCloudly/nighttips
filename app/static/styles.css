@@ -1473,11 +1473,16 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 .badge.raus { background: var(--live); border-color: transparent; color: #fff; }
 .verletzt-status.raus { color: var(--live); font-weight: 700; }
 
-/* Spiele favorisierter (gepinnter) Teams hervorheben */
+/* Spiele der Lieblings-Teams hervorheben (v0.2): Goldkante, sanfter
+   Schein und ein Stern in der Kopfzeile. */
 .spiel.favorit {
   border-color: color-mix(in srgb, var(--gold) 55%, var(--linie));
-  box-shadow: inset 3px 0 0 var(--gold);
+  box-shadow:
+    inset 3px 0 0 var(--gold),
+    0 4px 22px color-mix(in srgb, var(--gold) 14%, transparent);
 }
+
+.favorit-stern { color: var(--gold); font-size: 0.92rem; line-height: 1; }
 
 /* ----- Lupe (Detail-Overlay als Bottom-Sheet) ----- */
 

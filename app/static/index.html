@@ -9,9 +9,9 @@
 <link rel="icon" href="/icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <link rel="preload" href="/fonts/space-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/styles.css?v=38">
+<link rel="stylesheet" href="/styles.css?v=39">
 <!-- FOUC-Schutz: Modus vor dem ersten Rendern setzen; extern statt inline (CSP) -->
-<script src="/boot.js?v=38"></script>
+<script src="/boot.js?v=39"></script>
 </head>
 <body>
 <div class="app-shell">
@@ -75,7 +75,7 @@
                 <span class="hinweis-zeile">Push direkt aufs Handy</span></span>
               <span class="schalter"><input id="onboardingPush" type="checkbox"><span class="schalter-knauf"></span></span>
             </label>
-            <div class="toggle-zeile info"><span>⚽ Tore deiner gepinnten Spiele</span><span class="haken">✓</span></div>
+            <div class="toggle-zeile info"><span>⚽ Tore deiner Lieblings-Teams</span><span class="haken">✓</span></div>
             <div class="toggle-zeile info"><span>▶ Anpfiff &amp; Endstand</span><span class="haken">✓</span></div>
             <div class="toggle-zeile info"><span>⏰ Tipp-Erinnerung vor dem Spiel</span><span class="haken">✓</span></div>
           </div>
@@ -86,8 +86,8 @@
         <div class="onboarding-schritt" data-schritt="team" hidden>
           <img class="onboarding-hero" src="/illustrationen/hero-team-pick.webp" alt="">
           <h1>Wähl deine Teams</h1>
-          <p class="onboarding-sub">Gepinnte Teams stehen oben in der Spieleliste
-            und lösen Push-Alarme aus.</p>
+          <p class="onboarding-sub">Deine Lieblings-Teams stehen oben in der Spieleliste,
+            ihre Spiele glänzen golden — und Anstoß wie Tore kommen als Push.</p>
           <input id="onboardingSuche" type="search" placeholder="Team suchen …" aria-label="Team suchen">
           <div id="onboardingTeams" class="flaggen-gitter"></div>
           <button class="primaer breit" data-onboarding-fertig>Los geht's</button>
@@ -145,7 +145,8 @@
               <button data-status="live" role="tab" aria-selected="false">Live</button>
               <button data-status="anstehend" role="tab" aria-selected="false">Anstehend</button>
               <button data-status="beendet" role="tab" aria-selected="false">Beendet</button>
-              <button data-status="gepinnt" role="tab" aria-selected="false">★</button>
+              <button data-status="gepinnt" role="tab" aria-selected="false"
+                      aria-label="Meine Teams" title="Meine Teams">★</button>
             </div>
             <select id="filterGruppe" aria-label="Nach Runde filtern">
               <option value="">Alle Runden</option>
@@ -468,6 +469,6 @@
 
   <div id="toast" class="toast" hidden></div>
 </div>
-<script src="/app.js?v=38"></script>
+<script src="/app.js?v=39"></script>
 </body>
 </html>

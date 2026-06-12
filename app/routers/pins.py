@@ -54,6 +54,10 @@ def pin_setzen(
     tabelle = _PIN_TABELLEN.get(typ)
     if tabelle is None:
         raise HTTPException(status_code=404, detail="Pin-Typ unbekannt")
+    if typ == "spiel":
+        # v0.2: Favoriten sind Teams. Bestehende Spiel-Pins bleiben lesbar
+        # und löschbar, neue entstehen nicht mehr.
+        raise HTTPException(status_code=410, detail="Spiel-Pins gibt es nicht mehr — markiere stattdessen ein Team.")
     existiert = conn.execute(f"SELECT 1 FROM {tabelle} WHERE id = ?", (ref_id,)).fetchone()
     if existiert is None:
         raise HTTPException(status_code=404, detail=f"{typ} nicht gefunden")

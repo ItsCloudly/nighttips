@@ -64,18 +64,22 @@ def test_pin_endpunkte(client, conn, einstellungen):
     spiel_id = conn.execute("SELECT id FROM spiel").fetchone()["id"]
     team_id = conn.execute("SELECT id FROM team WHERE fifa_code = 'GER'").fetchone()["id"]
 
-    assert client.put(f"/api/pins/spiel/{spiel_id}").status_code == 204
     assert client.put(f"/api/pins/team/{team_id}").status_code == 204
-    assert client.put("/api/pins/spiel/99999").status_code == 404
+    # v0.2: neue Spiel-Pins gibt es nicht mehr — Favoriten sind Teams
+    assert client.put(f"/api/pins/spiel/{spiel_id}").status_code == 410
+    assert client.put("/api/pins/team/99999").status_code == 404
     assert client.put(f"/api/pins/quatsch/{spiel_id}").status_code == 404
 
     pins = client.get("/api/pins").json()
-    assert {(p["typ"], p["ref_id"]) for p in pins} == {("spiel", spiel_id), ("team", team_id)}
+    assert {(p["typ"], p["ref_id"]) for p in pins} == {("team", team_id)}
 
     spiele = client.get("/api/spiele").json()
-    assert spiele[0]["gepinnt"] is True
     assert spiele[0]["team_gepinnt"] is True
 
+    # Alt-Pins aus der Zeit vor v0.2 bleiben sichtbar und löschbar
+    mia_id = conn.execute("SELECT id FROM nutzer WHERE anzeigename = 'Mia'").fetchone()["id"]
+    _pin(conn, mia_id, "spiel", spiel_id)
+    assert len(client.get("/api/pins").json()) == 2
     assert client.delete(f"/api/pins/spiel/{spiel_id}").status_code == 204
     assert len(client.get("/api/pins").json()) == 1
 
@@ -89,6 +93,9 @@ def test_tor_push_nur_an_pin_nutzer(conn, push_einstellungen, gesendete):
     fan = _nutzer_mit_abo(conn, "Fan", "https://push.example/fan")
     _nutzer_mit_abo(conn, "Ignorant", "https://push.example/ignorant")
     _pin(conn, fan, "team", team_ger)
+    # Alt-Spiel-Pin (vor v0.2): ist stillgelegt und löst KEINE Pushes mehr aus
+    nostalgiker = _nutzer_mit_abo(conn, "Nostalgiker", "https://push.example/nostalgiker")
+    _pin(conn, nostalgiker, "spiel", spiel_id)
 
     # Anpfiff + Tor
     live_match = _api_match()
@@ -183,8 +190,9 @@ def test_anpfiff_erinnerung_fuer_pins(conn, push_einstellungen, gesendete):
     match["utcDate"] = iso_utc(jetzt_utc() + timedelta(minutes=20))
     sync.stammdaten_sync(conn, push_einstellungen, api=ApiAttrappe(API_TEAMS, [match]))
     spiel_id = conn.execute("SELECT id FROM spiel").fetchone()["id"]
+    team_ger = conn.execute("SELECT id FROM team WHERE fifa_code = 'GER'").fetchone()["id"]
     fan = _nutzer_mit_abo(conn, "Fan", "https://push.example/fan")
-    _pin(conn, fan, "spiel", spiel_id)
+    _pin(conn, fan, "team", team_ger)
     from app.services import tippspiel
 
     tippspiel.tipp_abgeben(conn, nutzer_id=fan, spiel_id=spiel_id, tipp_heim=2, tipp_gast=1)
