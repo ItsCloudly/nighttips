@@ -7,6 +7,7 @@ bleibt das Feature komplett aus; Quoten sind reine Orientierung.
 """
 from __future__ import annotations
 
+import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import timedelta
@@ -15,9 +16,11 @@ import httpx
 
 from .. import db
 from ..config import Einstellungen
-from ..zeit import iso_utc, jetzt_iso, jetzt_utc
+from ..zeit import iso_utc, jetzt_iso, jetzt_utc, parse_utc
 from . import sync
 from .laender import deutscher_name_extern
+
+logger = logging.getLogger("wm26.quoten")
 
 JOB_QUOTEN = "quoten"
 
@@ -110,7 +113,18 @@ def _h2h_quoten(event: dict) -> tuple[str, float, float, float] | None:
 
 
 def _spiel_finden(conn: sqlite3.Connection, event: dict) -> int | None:
-    """Zuordnung über Anstoßzeit + Teamnamen; eindeutige Anstoßzeit als Fallback."""
+    """Zuordnung über Anstoßzeit + Teamnamen, mit zwei Fallbacks.
+
+    1. Exakt: Anstoßzeit und beide Teamnamen stimmen.
+    2. Teamnamen im ±3-h-Fenster: The Odds API listet Anstoßzeiten
+       gelegentlich versetzt — bei parallelen Anstößen half der alte
+       Eindeutigkeits-Fallback dann nicht (z. B. Brasilien–Haiti und
+       Bosnien–Katar blieben ohne Quote). Dieselbe Paarung kommt im Spielplan
+       innerhalb von 3 h nur einmal vor, die Zuordnung bleibt eindeutig.
+       Bewusst NICHT mit vertauschtem Heim/Gast: dann wären auch die
+       1- und 2-Quoten vertauscht und landeten falsch herum in der DB.
+    3. Eindeutige Anstoßzeit (nur ein Spiel zu diesem Zeitpunkt).
+    """
     anstoss = str(event.get("commence_time") or "")
     heim = deutscher_name_extern(str(event.get("home_team") or ""))
     gast = deutscher_name_extern(str(event.get("away_team") or ""))
@@ -123,6 +137,25 @@ def _spiel_finden(conn: sqlite3.Connection, event: dict) -> int | None:
     ).fetchone()
     if zeile:
         return zeile["id"]
+    try:
+        zeitpunkt = parse_utc(anstoss)
+    except (ValueError, TypeError):
+        zeitpunkt = None
+    if zeitpunkt is not None:
+        zeile = conn.execute(
+            "SELECT s.id FROM spiel s"
+            " JOIN team th ON th.id = s.heim_team_id"
+            " JOIN team tg ON tg.id = s.gast_team_id"
+            " WHERE s.anstoss_utc BETWEEN ? AND ? AND th.name = ? AND tg.name = ?",
+            (
+                iso_utc(zeitpunkt - timedelta(hours=3)),
+                iso_utc(zeitpunkt + timedelta(hours=3)),
+                heim,
+                gast,
+            ),
+        ).fetchone()
+        if zeile:
+            return zeile["id"]
     kandidaten = conn.execute(
         "SELECT id FROM spiel WHERE anstoss_utc = ?", (anstoss,)
     ).fetchall()
@@ -156,6 +189,14 @@ def quoten_sync(
             spiel_id = _spiel_finden(conn, event)
             if spiel_id is None:
                 bericht.ohne_zuordnung += 1
+                # Originalnamen + Zeit ins Log: künftige Zuordnungslücken
+                # lassen sich damit ohne Rätselraten diagnostizieren.
+                logger.info(
+                    "Quote ohne Zuordnung: %s – %s (%s)",
+                    event.get("home_team"),
+                    event.get("away_team"),
+                    event.get("commence_time"),
+                )
                 continue
             anbieter, heim, remis, gast = quoten
             conn.execute(

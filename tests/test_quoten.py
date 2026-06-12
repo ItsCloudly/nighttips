@@ -99,6 +99,51 @@ def test_quoten_fallback_eindeutige_anstosszeit(conn, einstellungen, welt):
     ).fetchone()["anzahl"] == 1
 
 
+def test_quoten_fenster_fallback_bei_parallelen_anstoessen(conn, einstellungen):
+    """Versetzte API-Anstoßzeit + paralleler Anstoß: Teamnamen im ±3-h-Fenster
+    ordnen trotzdem zu. Der Eindeutigkeits-Fallback hilft bei zwei
+    gleichzeitigen Spielen nicht — der Backlog-Fall Brasilien–Haiti /
+    Bosnien–Katar blieb so ohne Quote."""
+    anstoss = "2030-06-17T18:00:00Z"
+    importer.spielplan_importieren(
+        conn,
+        {
+            "teams": [
+                {"fifa_code": "BRA", "name": "Brasilien", "gruppe": "C"},
+                {"fifa_code": "HAI", "name": "Haiti", "gruppe": "C"},
+                {"fifa_code": "BIH", "name": "Bosnien-Herzegowina", "gruppe": "C"},
+                {"fifa_code": "QAT", "name": "Katar", "gruppe": "C"},
+            ],
+            "spiele": [
+                {"runde": "Gruppe C", "anstoss_utc": anstoss, "heim": "BRA", "gast": "HAI"},
+                {"runde": "Gruppe C", "anstoss_utc": anstoss, "heim": "BIH", "gast": "QAT"},
+            ],
+        },
+        akteur="test",
+    )
+    conn.commit()
+    versetzt = "2030-06-17T19:00:00Z"  # die API listet beide Spiele +1 h
+    bericht = quoten.quoten_sync(
+        conn,
+        einstellungen,
+        daten=[
+            _event("Brazil", "Haiti", versetzt),
+            _event("Bosnia and Herzegovina", "Qatar", versetzt),
+        ],
+    )
+    assert bericht.aktualisiert == 2
+    assert bericht.ohne_zuordnung == 0
+    zugeordnet = {
+        zeile["name"]
+        for zeile in conn.execute(
+            "SELECT th.name FROM quote q"
+            " JOIN spiel s ON s.id = q.spiel_id"
+            " JOIN team th ON th.id = s.heim_team_id"
+        ).fetchall()
+    }
+    assert zugeordnet == {"Brasilien", "Bosnien-Herzegowina"}
+
+
 def test_quoten_upsert_statt_duplikat(conn, einstellungen, welt):
     quoten.quoten_sync(conn, einstellungen, daten=[_event("USA", "Mexico", ANSTOSS_A)])
     zweiter = _event("USA", "Mexico", ANSTOSS_A)

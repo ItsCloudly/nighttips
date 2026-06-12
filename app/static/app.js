@@ -499,9 +499,15 @@ function kalenderMonatWechseln(richtung) {
 }
 
 function duellTeamHtml(team) {
-  const flagge = team?.flagge_url
+  const bild = team?.flagge_url
     ? `<img class="flagge" src="${escapeHtml(team.flagge_url)}" alt="" loading="lazy">`
     : '<span class="platzhalter-flagge"></span>';
+  // Die Flagge ist der direkte Draht zur Teaminfo (v0.2) — eigener Knopf,
+  // der Rest der Karte öffnet das Spiel.
+  const flagge = team?.id
+    ? `<button class="flaggen-knopf" data-team-lupe="${team.id}"
+        aria-label="Teaminfo ${escapeHtml(team.name ?? "")}">${bild}</button>`
+    : bild;
   const name = team?.name
     ? `<span class="team-name">${escapeHtml(team.name)}</span>`
     : '<span class="team-name offen">Noch offen</span>';
@@ -560,15 +566,15 @@ function spielKarte(spiel, flashId) {
   } else if (!spiel.tippbar) {
     fuss = "<span>Kein Tipp abgegeben</span>";
   }
-  const detail =
-    spiel.status !== "abgesagt"
-      ? `<button class="detail-knopf klein" data-spiel="${spiel.id}">Details</button>`
-      : "";
 
+  // Die ganze Karte öffnet das Spiel (kein „Details“-Knopf mehr, v0.2);
+  // die Kopfzeile ist der fokussierbare Anker für die Tastatur.
   const favorit = spielIstGepinnt(spiel) ? " favorit" : "";
   return `<article class="karte spiel${favorit}" data-spiel="${spiel.id}">
     <div class="spiel-kopf">
-      <span class="links">${kopfTeile.join(" · ")}</span>
+      <button class="links spiel-kopf-knopf" data-spiel-lupe="${spiel.id}"
+        aria-label="Spiel öffnen: ${escapeHtml(spiel.heim?.name ?? "?")} gegen ${escapeHtml(spiel.gast?.name ?? "?")}">
+        ${kopfTeile.join(" · ")}</button>
       <span class="links">${badge}${pinKnopf("spiel", spiel.id)}</span>
     </div>
     <div class="duell">
@@ -576,7 +582,7 @@ function spielKarte(spiel, flashId) {
       <div class="duell-mitte">${duellMitteHtml(spiel, flashId)}</div>
       ${duellTeamHtml(spiel.gast)}
     </div>
-    <div class="spiel-fuss">${fuss}<span class="fuss-knoepfe">${detail}</span></div>
+    ${fuss ? `<div class="spiel-fuss">${fuss}</div>` : ""}
   </article>`;
 }
 
@@ -682,9 +688,15 @@ function heuteAnpfiffAbwarten(spielId) {
 /* ---------- Heute (Dashboard) ---------- */
 
 function heroTeamHtml(team) {
-  const flagge = team?.flagge_url
+  const bild = team?.flagge_url
     ? `<img class="flagge" src="${escapeHtml(team.flagge_url)}" alt="" loading="lazy">`
     : '<span class="platzhalter-flagge"></span>';
+  // Direkt auf die Flagge getippt → Teaminfo (v0.2); der restliche Hero
+  // öffnet weiterhin das Spiel.
+  const flagge = team?.id
+    ? `<button class="flaggen-knopf" data-team-lupe="${team.id}"
+        aria-label="Teaminfo ${escapeHtml(team.name ?? "")}">${bild}</button>`
+    : bild;
   const name = team?.name ?? "Noch offen";
   return `<div class="hero-team">${flagge}<span class="hero-team-name">${escapeHtml(name)}</span></div>`;
 }
@@ -718,7 +730,10 @@ function heuteHeroHtml(spiel, istLive) {
         spiel.stadion
       )}</span></div>`
     : `<div class="hero-meta">${escapeHtml(spiel.runde)}</div>`;
-  return `<button class="heute-hero" data-spiel-lupe="${spiel.id}"
+  // Kein <button> mehr: die Flaggen darin sind eigene Knöpfe, und Knöpfe
+  // dürfen nicht geschachtelt werden. role="button" + Enter/Space-Handler
+  // (heuteEreignisse) halten die Tastatur-Bedienung intakt.
+  return `<div class="heute-hero" role="button" tabindex="0" data-spiel-lupe="${spiel.id}"
       ${istLive ? "" : `data-anstoss="${spiel.anstoss_utc}"`}
       aria-label="Zum Spiel ${escapeHtml(spiel.heim?.name ?? "?")} gegen ${escapeHtml(spiel.gast?.name ?? "?")}">
     ${metaZeile}
@@ -727,7 +742,7 @@ function heuteHeroHtml(spiel, istLive) {
       <div class="hero-mitte">${mitte}</div>
       ${heroTeamHtml(spiel.gast)}
     </div>
-  </button>`;
+  </div>`;
 }
 
 function quickKachelnHtml() {
@@ -765,14 +780,19 @@ async function heuteRendern() {
         <div class="hero-label">Gerade kein Spiel — das Stadion ruht</div>
       </div>`
   );
-  const offen = zustand.spiele.filter((s) => s.tippbar && !s.mein_tipp);
+  // Nur was in den nächsten 24 h fällig wird — der Rest hat noch Zeit und
+  // würde die Zahl nur aufblähen.
+  const frist = Date.now() + 24 * 3600 * 1000;
+  const offen = zustand.spiele.filter(
+    (s) => s.tippbar && !s.mein_tipp && new Date(s.anstoss_utc) <= frist
+  );
   if (offen.length) {
     teile.push(`<button class="karte heute-tipps" data-quick="tippen">
       <span class="heute-tipps-zahl">${offen.length}</span>
       <span class="heute-tipps-text"><strong>${
         offen.length === 1 ? "Offener Tipp" : "Offene Tipps"
       }</strong><br>
-      <span class="hinweis-zeile">Jetzt tippen — bis zum Anpfiff änderbar</span></span>
+      <span class="hinweis-zeile">in den nächsten 24 Stunden — jetzt tippen</span></span>
       <span class="heute-tipps-pfeil" aria-hidden="true">›</span>
     </button>`);
   }
@@ -943,8 +963,21 @@ function spieleEreignisse() {
       pinUmschalten(pin.dataset.pinTyp, Number(pin.dataset.pinRef)).then(() => spieleRendern());
       return;
     }
-    const detail = ereignis.target.closest(".detail-knopf");
-    if (detail) spielLupeOeffnen(Number(detail.dataset.spiel)).catch(fehlerAnzeigen);
+    const team = ereignis.target.closest("[data-team-lupe]");
+    if (team) {
+      teamLupeOeffnen(Number(team.dataset.teamLupe)).catch(fehlerAnzeigen);
+      return;
+    }
+    const lupe = ereignis.target.closest("[data-spiel-lupe]");
+    if (lupe) {
+      spielLupeOeffnen(Number(lupe.dataset.spielLupe)).catch(fehlerAnzeigen);
+      return;
+    }
+    // Ganze Karte öffnet das Spiel — nur Eingaben und andere Bedienelemente
+    // (Tipp-Felder, aufklappbare Runden-Köpfe) bleiben bei ihrem Job.
+    if (ereignis.target.closest("input, button, select, textarea, a, summary, label")) return;
+    const karte = ereignis.target.closest(".spiel[data-spiel]");
+    if (karte) spielLupeOeffnen(Number(karte.dataset.spiel)).catch(fehlerAnzeigen);
   });
   for (const knopf of el("spieleFilterStatus").querySelectorAll("button")) {
     knopf.addEventListener("click", () => {
@@ -980,6 +1013,15 @@ function spieleEreignisse() {
 }
 
 function heuteEreignisse() {
+  // Tastatur-Ersatz für den Hero (div mit role="button"): Enter/Space öffnen
+  // das Spiel wie ein Klick.
+  el("heuteInhalt").addEventListener("keydown", (ereignis) => {
+    if (ereignis.key !== "Enter" && ereignis.key !== " ") return;
+    const ziel = ereignis.target.closest('[role="button"][data-spiel-lupe]');
+    if (!ziel) return;
+    ereignis.preventDefault();
+    spielLupeOeffnen(Number(ziel.dataset.spielLupe)).catch(fehlerAnzeigen);
+  });
   el("heuteInhalt").addEventListener("input", (ereignis) => {
     const eingabe = ereignis.target.closest(".tipp-eingabe");
     if (!eingabe) return;
@@ -998,14 +1040,16 @@ function heuteEreignisse() {
       pinUmschalten(pin.dataset.pinTyp, Number(pin.dataset.pinRef)).then(() => heuteRendern());
       return;
     }
+    // Flaggen vor dem Hero prüfen: der Flaggen-Knopf liegt IM Hero-Panel —
+    // Flagge führt zum Team, alles andere zum Spiel.
+    const team = ereignis.target.closest("[data-team-lupe]");
+    if (team) {
+      teamLupeOeffnen(Number(team.dataset.teamLupe)).catch(fehlerAnzeigen);
+      return;
+    }
     const lupe = ereignis.target.closest("[data-spiel-lupe]");
     if (lupe) {
       spielLupeOeffnen(Number(lupe.dataset.spielLupe)).catch(fehlerAnzeigen);
-      return;
-    }
-    const detail = ereignis.target.closest(".detail-knopf");
-    if (detail) {
-      spielLupeOeffnen(Number(detail.dataset.spiel)).catch(fehlerAnzeigen);
       return;
     }
     const teaser = ereignis.target.closest("[data-teaser-reader]");
@@ -1476,8 +1520,11 @@ function analyseSektionHtml(detail, typ, titel) {
   return teile.join("");
 }
 
-function tippZeilenHtml(detail) {
-  if (!detail.tipps.length) {
+function tippZeilenHtml(detail, phase) {
+  // Vor dem Anpfiff bleibt die Glaskugel stehen — auch wenn der eigene Tipp
+  // schon gespeichert ist (der steht oben in der Eingabe); fremde Tipps gibt
+  // es vor dem Anpfiff ohnehin nicht.
+  if (phase === "vor" || !detail.tipps.length) {
     return emptyStateHtml(
       "empty-no-tipps",
       "Noch keine Tipps",
@@ -1522,7 +1569,7 @@ function panelTippsHtml(detail, phase) {
   teile.push(quotenSektionHtml(detail, phase));
   teile.push(notizSektionHtml(detail));
   teile.push(analyseSektionHtml(detail, "prognose", "KI-Prognose"));
-  teile.push(`<section class="lupe-abschnitt"><h3>Tipps der Runde</h3>${tippZeilenHtml(detail)}</section>`);
+  teile.push(`<section class="lupe-abschnitt"><h3>Tipps der Runde</h3>${tippZeilenHtml(detail, phase)}</section>`);
   return teile.join("");
 }
 
@@ -1567,7 +1614,7 @@ function notizSektionHtml(detail) {
   return `<section class="lupe-abschnitt">
     <details class="notiz-bereich" data-notiz-bereich="${detail.id}"${notiz ? " open" : ""}>
       <summary class="notiz-kopf">Meine Notizen
-        <span class="neben">privat — sieht nur du</span></summary>
+        <span class="neben">privat — siehst nur du</span></summary>
       <textarea class="notiz-text" maxlength="2000" rows="4"
         aria-label="Private Notiz zu diesem Spiel"
         placeholder="Gedanken zum Spiel, Bauchgefühl, Merkzettel …">${escapeHtml(notiz?.text ?? "")}</textarea>
@@ -2297,7 +2344,7 @@ function gruppenGitterHtml(tabellen) {
             <span class="gruppe-platz">${zeile.platz}</span>
             ${teamFlagge(zeile.team_id)}
             <span class="gruppe-name">${escapeHtml(zeile.name)}</span>
-            <span class="gruppe-werte"><span>${zeile.spiele}</span><span>${diff}</span><strong>${zeile.punkte}</strong></span>
+            <span class="gruppe-werte"><span>${zeile.spiele}</span><span>${zeile.tore}:${zeile.gegentore}</span><span>${diff}</span><strong>${zeile.punkte}</strong></span>
           </button>`;
         })
         .join("");
@@ -2306,7 +2353,7 @@ function gruppenGitterHtml(tabellen) {
       // jetzt hinter dem Info-Knopf im Seitenkopf.
       return `<div class="karte gruppe-karte">
         <h3>Gruppe ${escapeHtml(gruppe)}</h3>
-        <div class="gruppe-legende" aria-hidden="true"><span>Sp.</span><span>Diff.</span><span>Pkt.</span></div>
+        <div class="gruppe-legende" aria-hidden="true"><span>Sp.</span><span>Tore</span><span>Diff.</span><span>Pkt.</span></div>
         ${zeilen}
       </div>`;
     })
@@ -2386,13 +2433,14 @@ function koBaumHtml() {
       .filter((s) => s.status === "geplant" && new Date(s.anstoss_utc) > new Date())
       .sort((a, b) => a.anstoss_utc.localeCompare(b.anstoss_utc))[0];
   const finale = runden.find((eintrag) => eintrag.runde === "Finale")?.spiele[0] ?? null;
-  // Überschrift oben in jeder Spalte (eine gemeinsame Kopfzeile), die Spiele
-  // darunter vertikal zentriert — sonst schwebt z. B. „Finale“ in der Mitte.
+  // Der Rundentitel gehört zu seinen Matches: Titel + Spiele werden als
+  // gemeinsamer Block vertikal zentriert — „Finale“ sitzt direkt über dem
+  // Finalspiel statt oben am Spaltenrand zu schweben.
   const spalten = runden
     .map(
       (eintrag) => `<div class="baum-spalte">
-        <h3>${escapeHtml(eintrag.runde)}</h3>
         <div class="baum-spiele">
+        <h3>${escapeHtml(eintrag.runde)}</h3>
         ${eintrag.spiele.map((spiel) => baumSpielHtml(spiel, aktuelles?.id)).join("")}
         ${
           eintrag.runde === "Finale"
