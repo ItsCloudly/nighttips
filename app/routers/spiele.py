@@ -5,6 +5,7 @@ import sqlite3
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 
 from ..abhaengigkeiten import aktueller_nutzer, get_db, get_einstellungen, ki_sichtbar
 from ..config import Einstellungen
@@ -366,7 +367,7 @@ def spieler_detail(
 ) -> dict[str, Any]:
     """Spieler-Lupe (SPEC 5.3): Stammdaten + Turnierstatistik aus den Ereignissen."""
     spieler = conn.execute(
-        "SELECT s.id, s.name, s.position, s.trikotnummer, s.geburtsdatum, s.verein,"
+        "SELECT s.id, s.name, s.position, s.trikotnummer, s.geburtsdatum, s.verein, s.foto,"
         " t.id AS team_id, t.name AS team_name, t.fifa_code, t.flagge_url"
         " FROM spieler s JOIN team t ON t.id = s.team_id WHERE s.id = ?",
         (spieler_id,),
@@ -402,6 +403,30 @@ def spieler_detail(
     }
 
 
+@router.get("/spielerfotos/{spieler_id}")
+def spielerfoto_holen(
+    spieler_id: int,
+    nutzer: Annotated[sqlite3.Row, Depends(aktueller_nutzer)],
+    conn: Annotated[sqlite3.Connection, Depends(get_db)],
+    einstellungen: Annotated[Einstellungen, Depends(get_einstellungen)],
+) -> FileResponse:
+    """Spielerfoto (v0.2): WebP aus daten/spielerfotos, befüllt von
+    tools/kader_sync.py (TheSportsDB). Nur für angemeldete Mitspieler."""
+    zeile = conn.execute("SELECT foto FROM spieler WHERE id = ?", (spieler_id,)).fetchone()
+    dateiname = zeile["foto"] if zeile else None
+    if not dateiname or "/" in dateiname or "\\" in dateiname or ".." in dateiname:
+        raise HTTPException(status_code=404, detail="Kein Spielerfoto")
+    pfad = einstellungen.db_pfad.parent / "spielerfotos" / dateiname
+    if not pfad.is_file():
+        raise HTTPException(status_code=404, detail="Kein Spielerfoto")
+    # Dateiname in der URL ist stabil je Sync-Lauf — privat lange cachen.
+    return FileResponse(
+        pfad,
+        media_type="image/webp",
+        headers={"Cache-Control": "private, max-age=604800"},
+    )
+
+
 @router.get("/teams/{team_id}")
 def team_detail(
     team_id: int,
@@ -418,7 +443,8 @@ def team_detail(
         "SELECT name, nationalitaet FROM trainer WHERE team_id = ?", (team_id,)
     ).fetchone()
     kader = conn.execute(
-        "SELECT id, name, trikotnummer, position, geburtsdatum FROM spieler WHERE team_id = ?"
+        "SELECT id, name, trikotnummer, position, geburtsdatum, foto FROM spieler"
+        " WHERE team_id = ?"
         " ORDER BY CASE position WHEN 'Torwart' THEN 1 WHEN 'Abwehr' THEN 2"
         " WHEN 'Mittelfeld' THEN 3 WHEN 'Sturm' THEN 4 ELSE 5 END, name COLLATE NOCASE",
         (team_id,),

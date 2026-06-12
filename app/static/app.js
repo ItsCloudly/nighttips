@@ -2227,6 +2227,17 @@ function teamTabHtml(team) {
   return teile.join("");
 }
 
+/* Spielerfoto (v0.2, tools/kader_sync.py): rundes WebP aus der DB —
+   ohne Foto ein Platzhalter mit Initiale, damit die Liste ruhig bleibt. */
+function spielerFotoHtml(person, klasse = "kader-foto") {
+  if (person.foto) {
+    return `<img class="${klasse}" src="/api/spielerfotos/${person.id}?v=${encodeURIComponent(person.foto)}"
+      alt="" loading="lazy">`;
+  }
+  const initiale = escapeHtml(String(person.name ?? "?").slice(0, 1).toUpperCase());
+  return `<span class="${klasse} platzhalter">${initiale}</span>`;
+}
+
 /* Kompletter Kader als Positions-Liste — geteilt zwischen Spiel-Lupe
    (Teams-Tab) und Team-Lupe. */
 function kaderListeHtml(team) {
@@ -2254,6 +2265,7 @@ function kaderListeHtml(team) {
           ? `<span class="kader-info verletzt">${escapeHtml(status === "faellt aus" ? "fällt aus" : status)}</span>`
           : `<span class="kader-info">${alterText(person.geburtsdatum)}</span>`;
         return `<button class="kader-zeile" data-spieler-lupe="${person.id}">
+          ${spielerFotoHtml(person)}
           <span class="kader-nummer">${person.trikotnummer ?? "–"}</span>
           <span class="kader-name">${escapeHtml(person.name)}</span>${info}</button>`;
       })
@@ -2479,8 +2491,11 @@ async function spielerLupeOeffnen(spielerId) {
   ].filter(Boolean);
   lupeOeffnen(`<header class="lupe-spielkopf">
       <div class="lupe-team">
+        ${spielerFotoHtml(spieler, "kader-foto gross")}
         <span class="name" style="font-size:1.3rem">${escapeHtml(spieler.name)}</span>
-        <span class="lupe-meta">${escapeHtml(spieler.team_name)}</span>
+        <span class="lupe-meta">${escapeHtml(spieler.team_name)}${
+          spieler.verein ? ` · ${escapeHtml(spieler.verein)}` : ""
+        }</span>
       </div>
     </header>
     <section class="lupe-abschnitt"><h3>Profil &amp; Turnierstatistik</h3>

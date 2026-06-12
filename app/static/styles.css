@@ -1964,7 +1964,7 @@ button.chat-name { cursor: pointer; }
 
 .kader-zeile {
   display: grid;
-  grid-template-columns: 30px 1fr auto;
+  grid-template-columns: 30px 26px 1fr auto;
   align-items: center;
   gap: 8px;
   border: 0;
@@ -1974,6 +1974,33 @@ button.chat-name { cursor: pointer; }
   border-radius: 9px;
   text-align: left;
   font-size: 0.92rem;
+}
+
+/* Spielerfoto (v0.2): rundes Mini-Porträt, Platzhalter mit Initiale */
+.kader-foto {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: top;
+  background: var(--karte-hoch);
+  border: 1px solid var(--linie);
+}
+
+span.kader-foto.platzhalter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+.kader-foto.gross {
+  width: 72px;
+  height: 72px;
+  font-size: 1.6rem;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
 }
 
 .kader-zeile:hover { background: color-mix(in srgb, var(--akzent) 10%, transparent); }

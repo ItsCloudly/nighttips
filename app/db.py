@@ -52,6 +52,9 @@ def _migrationen(conn: sqlite3.Connection) -> None:
     spiel_spalten = {zeile["name"] for zeile in conn.execute("PRAGMA table_info(spiel)")}
     if "espn_ref" not in spiel_spalten:
         conn.execute("ALTER TABLE spiel ADD COLUMN espn_ref TEXT")
+    spieler_spalten = {zeile["name"] for zeile in conn.execute("PRAGMA table_info(spieler)")}
+    if "foto" not in spieler_spalten:
+        conn.execute("ALTER TABLE spieler ADD COLUMN foto TEXT")
 
 
 @contextmanager

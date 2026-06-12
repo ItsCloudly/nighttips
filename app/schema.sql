@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS spieler (
     geburtsdatum TEXT,
     verein       TEXT,
     api_ref      TEXT UNIQUE,
+    foto         TEXT, -- Dateiname in daten/spielerfotos/ (tools/kader_sync.py, v0.2)
     UNIQUE (team_id, trikotnummer)
 );
 
