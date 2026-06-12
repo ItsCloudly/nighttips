@@ -904,6 +904,9 @@ async function heuteRendern() {
       <span class="heute-tipps-pfeil" aria-hidden="true">›</span>
     </button>`);
   }
+  // Fester Slot für den Tagessieger von gestern (v0.2): füllt sich asynchron,
+  // bleibt bei unverändertem HTML stehen (Flacker-Schutz wie der News-Slot).
+  teile.push('<div data-tagessieger-slot></div>');
   teile.push(quickKachelnHtml());
   // Horizontale Leiste der nächsten Spiele (ersetzt News-Teaser und den
   // alten „Heute“-Block); die News folgen darunter als vertikale Liste.
@@ -924,6 +927,33 @@ async function heuteRendern() {
   htmlAktualisieren(el("heuteInhalt"), teile.join(""));
   countdownStarten();
   newsTeaserLaden().catch(() => {});
+  tagessiegerLaden().catch(() => {});
+}
+
+/* Tagessieger von gestern (v0.2): bester Tipper der gestrigen Tageswertung
+   als Glanz-Chip — Klick öffnet das Profil. Bei Gleichstand stehen bis zu
+   zwei Namen, sonst die Anzahl. */
+async function tagessiegerLaden() {
+  const gestern = new Date(Date.now() - 864e5).toLocaleDateString("en-CA");
+  const liste = await api(`/api/rangliste?datum=${gestern}`);
+  const slot = el("heuteInhalt").querySelector("[data-tagessieger-slot]");
+  if (!slot) return;
+  const beste = liste.filter((eintrag) => eintrag.platz === 1 && eintrag.punkte > 0);
+  if (!beste.length) {
+    htmlAktualisieren(slot, "");
+    return;
+  }
+  const namen = beste.map((eintrag) => eintrag.anzeigename);
+  const label =
+    namen.length <= 2 ? namen.join(" & ") : `${namen.length} Tipper im Gleichstand`;
+  htmlAktualisieren(
+    slot,
+    `<button type="button" class="karte tagessieger-chip" data-profil-direkt="${beste[0].nutzer_id}">
+      <span class="tagessieger-pokal" aria-hidden="true">🏆</span>
+      <span class="tagessieger-text"><strong>Tagessieger gestern</strong><br>
+        <span class="hinweis-zeile">${escapeHtml(label)} · +${beste[0].punkte} Punkte</span></span>
+    </button>`
+  );
 }
 
 function kommendKarteHtml(spiel) {
@@ -1144,6 +1174,12 @@ function heuteEreignisse() {
       );
       return;
     }
+    // Tagessieger-Chip öffnet das Profil (v0.2)
+    const profilChip = ereignis.target.closest("[data-profil-direkt]");
+    if (profilChip) {
+      profilLupeOeffnen(Number(profilChip.dataset.profilDirekt)).catch(fehlerAnzeigen);
+      return;
+    }
     // Flaggen vor dem Hero prüfen: der Flaggen-Knopf liegt IM Hero-Panel —
     // Flagge führt zum Team, alles andere zum Spiel.
     const team = ereignis.target.closest("[data-team-lupe]");
@@ -1247,6 +1283,12 @@ function lupeEreignisse() {
   el("lupe").addEventListener("click", (ereignis) => {
     if (ereignis.target.closest("[data-lupe-schliessen]")) {
       lupeSchliessen();
+      return;
+    }
+    // Nutzerprofil aus Chat (Avatar/Name) oder anderen Lupen-Inhalten
+    const profilKnopf = ereignis.target.closest("[data-profil]");
+    if (profilKnopf) {
+      profilLupeOeffnen(Number(profilKnopf.dataset.profil)).catch(fehlerAnzeigen);
       return;
     }
     // Gruppenchat: Reaktions-Chips, Emoji-Palette, ältere Nachrichten
@@ -2964,7 +3006,8 @@ async function ranglisteLaden() {
         spitze
           .map((eintrag, index) => {
             const ki = eintrag.rolle === "ki" ? '<span class="ki">KI</span>' : "";
-            return `<div class="podium-platz ${klassen[index]}">
+            return `<div class="podium-platz ${klassen[index]}" data-nutzer="${eintrag.nutzer_id}"
+              role="button" tabindex="0" aria-label="Profil von ${escapeHtml(eintrag.anzeigename)}">
             <div class="podium-medaille">${medaillen[eintrag.platz - 1] ?? ""}</div>
             ${avatarHtml(eintrag, "tipper-avatar podium-avatar")}
             <div class="podium-name">${escapeHtml(eintrag.anzeigename)}${ki}</div>
@@ -2986,7 +3029,9 @@ async function ranglisteLaden() {
       .map((eintrag) => {
         const ki = eintrag.rolle === "ki" ? '<span class="ki">KI</span>' : "";
         const bonus = eintrag.bonus_punkte ? ` title="inkl. +${eintrag.bonus_punkte} Bonus"` : "";
-        return `<tr>
+        // Zeile öffnet das Nutzerprofil (v0.2) — Tastatur über tabindex+Enter
+        return `<tr data-nutzer="${eintrag.nutzer_id}" tabindex="0"
+            aria-label="Profil von ${escapeHtml(eintrag.anzeigename)}">
           <td class="num rang-platz">${eintrag.platz}</td>
           <td class="rang-name">${avatarHtml(eintrag, "tipper-avatar mini")}${escapeHtml(eintrag.anzeigename)}${ki}</td>
           <td class="num">${eintrag.tipps_gewertet}</td>
@@ -3212,6 +3257,77 @@ function bonusEreignisse() {
   });
 }
 
+/* ---------- Nutzerprofil (v0.2) ----------
+
+   Klick auf eine Ranglisten-Zeile, das Podium oder einen Chat-Avatar öffnet
+   das Profil: Statistik, Abzeichen und die Tipp-Historie (nur Spiele, deren
+   Anpfiff vorbei ist — die Geheimhaltung regelt der Server). */
+
+function abzeichenChipHtml(a) {
+  const stand = a.erreicht ? (a.wert > 1 ? ` ×${a.wert}` : "") : ` ${a.wert}/${a.ziel}`;
+  return `<div class="abzeichen${a.erreicht ? " erreicht" : ""}"
+      title="${escapeHtml(a.beschreibung)}">
+    <span class="abzeichen-emoji" aria-hidden="true">${a.emoji}</span>
+    <span class="abzeichen-titel">${escapeHtml(a.titel)}${escapeHtml(stand)}</span>
+  </div>`;
+}
+
+async function profilLupeOeffnen(nutzerId) {
+  const profil = await api(`/api/profil/${nutzerId}`);
+  const person = profil.nutzer;
+  const ki = person.rolle === "ki" ? ' <span class="ki">KI</span>' : "";
+  const rang = profil.rangliste;
+  const dabei = new Date(person.dabei_seit).toLocaleDateString("de-DE", {
+    month: "long",
+    year: "numeric",
+  });
+  const teile = [];
+  teile.push(`<header class="profil-kopf">
+    ${avatarHtml(person, "tipper-avatar profil-avatar")}
+    <div class="profil-titel">
+      <h2>${escapeHtml(person.anzeigename)}${ki}</h2>
+      <span class="hinweis-zeile">dabei seit ${escapeHtml(dabei)}</span>
+    </div>
+  </header>`);
+  if (rang) {
+    teile.push(`<div class="profil-zahlen">
+      <div class="profil-zahl"><strong>#${rang.platz}</strong><span>Platz</span></div>
+      <div class="profil-zahl"><strong>${rang.punkte}</strong><span>Punkte</span></div>
+      <div class="profil-zahl"><strong>${rang.exakt}</strong><span>exakt</span></div>
+      <div class="profil-zahl"><strong>${rang.tipps_gewertet}</strong><span>gewertet</span></div>
+    </div>`);
+    if (rang.form?.length) {
+      teile.push(`<div class="profil-form"><span class="rang-detail">Form</span> ${tipperFormkette(rang.form)}</div>`);
+    }
+  }
+  const erreichte = profil.abzeichen.filter((a) => a.erreicht).length;
+  teile.push(`<section class="lupe-abschnitt"><h3>Abzeichen
+      <span class="rang-detail">· ${erreichte} von ${profil.abzeichen.length}</span></h3>
+    <div class="abzeichen-gitter">${profil.abzeichen.map(abzeichenChipHtml).join("")}</div>
+  </section>`);
+  const tippZeilen = profil.tipps.map((t) => {
+    const datum = new Date(t.anstoss_utc).toLocaleDateString("de-DE", {
+      day: "2-digit",
+      month: "2-digit",
+    });
+    const ergebnis = t.tore_heim !== null ? `${t.tore_heim}:${t.tore_gast}` : "–:–";
+    const chip =
+      t.punkte === null
+        ? '<span class="punkte-chip offen">läuft</span>'
+        : `<span class="punkte-chip p${t.punkte}">+${t.punkte}</span>`;
+    return `<div class="tipp-zeile">
+      <span>${datum} · ${escapeHtml(t.heim_code ?? "?")}–${escapeHtml(t.gast_code ?? "?")}
+        <span class="rang-detail">${ergebnis}</span></span>
+      <span><strong>${t.tipp_heim}:${t.tipp_gast}</strong> ${chip}</span>
+    </div>`;
+  });
+  teile.push(`<section class="lupe-abschnitt"><h3>Vergangene Tipps
+      <span class="rang-detail">· ab Anpfiff sichtbar</span></h3>
+    ${tippZeilen.join("") || '<p class="hinweis">Noch keine Tipps zu angepfiffenen Spielen.</p>'}
+  </section>`);
+  lupeOeffnen(`<div class="profil">${teile.join("")}</div>`);
+}
+
 /* ---------- Gruppenchat (v0.2) ----------
 
    Eine Unterhaltung für die ganze Tipprunde, als Vollbild-Lupe über der
@@ -3298,9 +3414,14 @@ function chatNachrichtHtml(n) {
   const stand = escapeHtml(JSON.stringify(n.reaktionen ?? []));
   return `<div class="chat-nachricht${eigene ? " eigene" : ""}" data-chat-id="${n.id}"
       data-chat-tag="${escapeHtml(lokalerTag(n.erstellt_utc))}">
-    ${eigene ? "" : avatarHtml(n, "tipper-avatar chat-avatar")}
+    ${
+      eigene
+        ? ""
+        : `<button type="button" class="chat-avatar-knopf" data-profil="${n.nutzer_id}"
+            aria-label="Profil von ${escapeHtml(n.anzeigename)}">${avatarHtml(n, "tipper-avatar chat-avatar")}</button>`
+    }
     <div class="chat-blase">
-      ${eigene ? "" : `<span class="chat-name">${escapeHtml(n.anzeigename)}${ki}</span>`}
+      ${eigene ? "" : `<button type="button" class="chat-name" data-profil="${n.nutzer_id}">${escapeHtml(n.anzeigename)}${ki}</button>`}
       <span class="chat-text">${escapeHtml(n.inhalt)}</span>
       <span class="chat-zeit">${lokaleUhrzeit(n.erstellt_utc)} Uhr</span>
       <div class="chat-reaktionen" data-chat-reaktionen data-stand="${stand}">${chatChipsHtml(
@@ -3419,6 +3540,20 @@ async function chatReagieren(nachrichtId, emoji, warAktiv) {
 
 function ranglisteEreignisse() {
   el("chatKnopf").addEventListener("click", () => chatOeffnen().catch(fehlerAnzeigen));
+  // Zeilen + Podium öffnen das Nutzerprofil (v0.2)
+  const profilOeffnen = (ereignis) => {
+    const ziel = ereignis.target.closest("[data-nutzer]");
+    if (ziel) profilLupeOeffnen(Number(ziel.dataset.nutzer)).catch(fehlerAnzeigen);
+  };
+  el("ranglisteListe").addEventListener("click", profilOeffnen);
+  el("podium").addEventListener("click", profilOeffnen);
+  el("view-rangliste").addEventListener("keydown", (ereignis) => {
+    if (ereignis.key !== "Enter" && ereignis.key !== " ") return;
+    const ziel = ereignis.target.closest("[data-nutzer]");
+    if (!ziel) return;
+    ereignis.preventDefault();
+    profilLupeOeffnen(Number(ziel.dataset.nutzer)).catch(fehlerAnzeigen);
+  });
   for (const knopf of document.querySelectorAll("#view-rangliste .segmente button")) {
     knopf.addEventListener("click", () => {
       zustand.zeitraum = knopf.dataset.zeitraum;
@@ -3947,32 +4082,38 @@ async function adminBonusLaden() {
 }
 
 async function bonusAufloesenDialog(frageId, typ) {
-  const name = prompt(
+  // Mehrfach-Auflösung (v0.2): mehrere richtige Antworten mit Komma trennen —
+  // z. B. die vier Halbfinalisten. Jeder Tipp auf eine davon punktet voll.
+  const eingabe = prompt(
     typ === "team"
-      ? "Richtige Antwort: Teamname (z. B. Deutschland)"
-      : "Richtige Antwort: Spielername (exakt)"
+      ? "Richtige Antwort(en): Teamnamen, mehrere mit Komma (z. B. Spanien, Frankreich, Brasilien, Deutschland)"
+      : "Richtige Antwort(en): Spielernamen (exakt), mehrere mit Komma"
   );
-  if (!name) return;
+  if (!eingabe) return;
   try {
-    let ref = null;
-    if (typ === "team") {
-      const team = zustand.teams.find(
-        (kandidat) => kandidat.name.toLowerCase() === name.trim().toLowerCase()
-      );
-      if (!team) throw new Error(`Team '${name}' nicht gefunden`);
-      ref = team.id;
-    } else {
-      const treffer = await api(`/api/spieler?suche=${encodeURIComponent(name.trim())}&limit=2`);
-      if (treffer.length !== 1) {
-        throw new Error(
-          treffer.length === 0 ? `Spieler '${name}' nicht gefunden` : "Name nicht eindeutig — bitte exakter"
+    const namen = eingabe.split(",").map((teil) => teil.trim()).filter(Boolean);
+    if (!namen.length) throw new Error("Keine Antwort angegeben");
+    const refs = [];
+    for (const name of namen) {
+      if (typ === "team") {
+        const team = zustand.teams.find(
+          (kandidat) => kandidat.name.toLowerCase() === name.toLowerCase()
         );
+        if (!team) throw new Error(`Team '${name}' nicht gefunden`);
+        refs.push(team.id);
+      } else {
+        const treffer = await api(`/api/spieler?suche=${encodeURIComponent(name)}&limit=2`);
+        if (treffer.length !== 1) {
+          throw new Error(
+            treffer.length === 0 ? `Spieler '${name}' nicht gefunden` : `'${name}' nicht eindeutig — bitte exakter`
+          );
+        }
+        refs.push(treffer[0].id);
       }
-      ref = treffer[0].id;
     }
     const ergebnis = await api(`/api/admin/bonusfragen/${frageId}/aufloesen`, {
       method: "POST",
-      body: JSON.stringify({ aufloesung_ref: ref }),
+      body: JSON.stringify({ aufloesung_refs: refs }),
     });
     toast(`Aufgelöst — ${ergebnis.tipps_gewertet} Tipps gewertet`);
     await Promise.all([adminBonusLaden(), bonusfragenLaden()]);

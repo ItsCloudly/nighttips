@@ -1605,6 +1605,99 @@ button.klein { min-height: 34px; padding: 5px 10px; font-size: 0.85rem; }
 .chat-eingabe input { flex: 1; min-width: 0; }
 .chat-eingabe button { flex-shrink: 0; width: 46px; padding: 0; }
 
+/* Avatar/Name im Chat sind Knöpfe (Profil öffnen) — ohne Knopf-Optik */
+.chat-avatar-knopf,
+button.chat-name {
+  border: 0;
+  background: none;
+  padding: 0;
+  min-height: 0;
+  text-align: left;
+}
+
+button.chat-name { cursor: pointer; }
+
+/* ----- Nutzerprofil (v0.2) ----- */
+
+.rang-tabelle tbody tr[data-nutzer] { cursor: pointer; }
+.rang-tabelle tbody tr[data-nutzer]:focus-visible { outline: 2px solid var(--ns-cyan); outline-offset: -2px; }
+.podium-platz[data-nutzer] { cursor: pointer; }
+
+.profil-kopf { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.profil-avatar { width: 56px; height: 56px; font-size: 1.4rem; flex-shrink: 0; }
+.profil-titel h2 { margin: 0; }
+
+.profil-zahlen {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.profil-zahl {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 4px;
+  border-radius: 12px;
+  background: var(--karte);
+  border: 1px solid var(--linie);
+}
+
+.profil-zahl strong { font-family: var(--ns-display); font-size: 1.15rem; }
+.profil-zahl span { font-size: 0.68rem; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.06em; }
+
+.profil-form { margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+
+.abzeichen-gitter {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.abzeichen {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--karte);
+  border: 1px solid var(--linie);
+  opacity: 0.45;
+  filter: grayscale(0.8);
+}
+
+.abzeichen.erreicht {
+  opacity: 1;
+  filter: none;
+  border-color: color-mix(in srgb, var(--gold) 45%, var(--linie));
+  box-shadow: 0 2px 12px color-mix(in srgb, var(--gold) 12%, transparent);
+}
+
+.abzeichen-emoji { font-size: 1.25rem; }
+.abzeichen-titel { font-size: 0.78rem; font-weight: 600; line-height: 1.25; }
+
+/* Punkte-Chips in der Tipp-Historie: lila = exakt, grau = daneben */
+.punkte-chip.p4 { background: color-mix(in srgb, var(--ns-lila) 30%, transparent); color: var(--ns-lila); }
+.punkte-chip.p0 { opacity: 0.55; }
+.punkte-chip.offen { opacity: 0.7; font-style: italic; }
+
+/* Tagessieger-Chip auf dem Heute-Dashboard (v0.2) */
+.tagessieger-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  border-color: color-mix(in srgb, var(--gold) 40%, var(--linie));
+  background:
+    radial-gradient(120% 160% at 0% 0%, color-mix(in srgb, var(--gold) 14%, transparent), transparent 60%),
+    var(--karte);
+}
+
+.tagessieger-pokal { font-size: 1.5rem; filter: drop-shadow(0 4px 10px color-mix(in srgb, var(--gold) 45%, transparent)); }
+
 /* ----- Lupe (Detail-Overlay als Bottom-Sheet) ----- */
 
 .lupe { position: fixed; inset: 0; z-index: 60; }

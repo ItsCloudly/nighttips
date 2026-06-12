@@ -16,8 +16,9 @@ from .. import db, ratelimit, security
 from ..abhaengigkeiten import aktueller_nutzer, get_db, get_einstellungen
 from ..config import Einstellungen
 from ..modelle import NameAenderung, PinWechsel
+from ..services import abzeichen as abzeichen_service
 from ..services import nutzer as nutzer_service
-from ..services import profilbilder
+from ..services import profilbilder, tippspiel
 from ..zeit import jetzt_iso
 
 router = APIRouter(prefix="/api", tags=["profil"])
@@ -145,3 +146,57 @@ def pin_wechseln(
     except ValueError as fehler:
         raise HTTPException(status_code=422, detail=str(fehler)) from fehler
     return {"status": "ok", "hinweis": "PIN geändert — bitte neu anmelden."}
+
+
+@router.get("/profil/{nutzer_id}")
+def profil_ansehen(
+    nutzer_id: int,
+    nutzer: Annotated[sqlite3.Row, Depends(aktueller_nutzer)],
+    conn: Annotated[sqlite3.Connection, Depends(get_db)],
+) -> dict[str, Any]:
+    """Oeffentliches Profil eines Mitspielers (v0.2): Kopf, Statistik,
+    Abzeichen und die Tipp-Historie.
+
+    Tipp-Geheimhaltung: Es erscheinen nur Tipps zu Spielen, deren Anpfiff
+    vorbei ist (Status != geplant) - dieselbe Fairness-Regel wie in der
+    Spiel-Lupe. Konten ausserhalb der Rangliste (rangliste_sichtbar = 0)
+    liefern keinen Platz, sind aber ansehbar.
+    """
+    person = conn.execute(
+        "SELECT id, anzeigename, rolle, profilbild, erstellt_utc FROM nutzer WHERE id = ?",
+        (nutzer_id,),
+    ).fetchone()
+    if person is None:
+        raise HTTPException(status_code=404, detail="Nutzer nicht gefunden")
+    eintrag = next(
+        (
+            zeile
+            for zeile in tippspiel.rangliste(conn)
+            if zeile["nutzer_id"] == nutzer_id
+        ),
+        None,
+    )
+    tipps = conn.execute(
+        "SELECT t.spiel_id, t.tipp_heim, t.tipp_gast, t.punkte,"
+        " s.anstoss_utc, s.runde, s.status, s.tore_heim, s.tore_gast,"
+        " th.fifa_code AS heim_code, tg.fifa_code AS gast_code,"
+        " th.name AS heim_name, tg.name AS gast_name"
+        " FROM tipp t JOIN spiel s ON s.id = t.spiel_id"
+        " LEFT JOIN team th ON th.id = s.heim_team_id"
+        " LEFT JOIN team tg ON tg.id = s.gast_team_id"
+        " WHERE t.nutzer_id = ? AND s.status != 'geplant'"
+        " ORDER BY s.anstoss_utc DESC, s.id DESC LIMIT 120",
+        (nutzer_id,),
+    ).fetchall()
+    return {
+        "nutzer": {
+            "id": person["id"],
+            "anzeigename": person["anzeigename"],
+            "rolle": person["rolle"],
+            "profilbild": person["profilbild"],
+            "dabei_seit": person["erstellt_utc"],
+        },
+        "rangliste": dict(eintrag) if eintrag else None,
+        "abzeichen": abzeichen_service.fuer_nutzer(conn, nutzer_id),
+        "tipps": [dict(zeile) for zeile in tipps],
+    }

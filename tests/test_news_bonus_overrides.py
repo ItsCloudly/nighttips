@@ -173,6 +173,69 @@ def test_bonusfrage_ablauf(client, conn, einstellungen):
     assert mia_heute["punkte"] == 0
 
 
+def test_bonusfrage_mehrfach_aufloesung(client, conn, einstellungen):
+    """v0.2: Fragen wie „Wer erreicht das Halbfinale?" haben mehrere richtige
+    Antworten — jeder Tipp auf eine davon punktet voll. Erneutes Auflösen
+    ersetzt die Wertung (Korrektur)."""
+    sync.stammdaten_sync(conn, einstellungen, api=ApiAttrappe(API_TEAMS, [_api_match()]))
+    nutzer_service.nutzer_anlegen(conn, anzeigename="Chef", pin="1234", rolle="admin", akteur="t")
+    nutzer_service.nutzer_anlegen(conn, anzeigename="Mia", pin="1234", akteur="t")
+    team_ger = conn.execute("SELECT id FROM team WHERE fifa_code = 'GER'").fetchone()["id"]
+    team_sco = conn.execute("SELECT id FROM team WHERE fifa_code = 'SCO'").fetchone()["id"]
+
+    client.post("/api/login", json={"anzeigename": "Chef", "pin": "1234"})
+    schluss = iso_utc(jetzt_utc() + timedelta(hours=2))
+    frage = client.post(
+        "/api/admin/bonusfragen",
+        json={"frage": "Wer erreicht das Finale?", "typ": "team", "punkte_wert": 5,
+              "einsendeschluss_utc": schluss},
+    ).json()
+    client.post("/api/bonustipps", json={"bonusfrage_id": frage["id"], "antwort_ref": team_sco})
+    client.post("/api/logout")
+    client.post("/api/login", json={"anzeigename": "Mia", "pin": "1234"})
+    client.post("/api/bonustipps", json={"bonusfrage_id": frage["id"], "antwort_ref": team_ger})
+    client.post("/api/logout")
+    client.post("/api/login", json={"anzeigename": "Chef", "pin": "1234"})
+
+    # Erst (irrtümlich) nur Deutschland auflösen: Chef geht leer aus
+    client.post(
+        f"/api/admin/bonusfragen/{frage['id']}/aufloesen",
+        json={"aufloesung_refs": [team_ger]},
+    )
+    punkte = {
+        zeile["nutzer_id"]: zeile["punkte"]
+        for zeile in conn.execute("SELECT nutzer_id, punkte FROM bonustipp").fetchall()
+    }
+    assert sorted(punkte.values()) == [0, 5]
+
+    # Korrektur: BEIDE Teams stehen im Finale → beide Tipps punkten voll
+    aufgeloest = client.post(
+        f"/api/admin/bonusfragen/{frage['id']}/aufloesen",
+        json={"aufloesung_refs": [team_ger, team_sco]},
+    ).json()
+    assert aufgeloest["tipps_gewertet"] == 2
+    punkte = [
+        zeile["punkte"]
+        for zeile in conn.execute("SELECT punkte FROM bonustipp").fetchall()
+    ]
+    assert punkte == [5, 5]
+
+    fragen = client.get("/api/bonusfragen").json()
+    eintrag = next(f for f in fragen if f["id"] == frage["id"])
+    assert eintrag["offen"] is False
+    assert sorted(eintrag["aufloesung_namen"]) == ["Deutschland", "Schottland"]
+    assert "Deutschland" in eintrag["aufloesung_name"]
+    assert "Schottland" in eintrag["aufloesung_name"]
+
+    # Leere Auflösung wird abgelehnt
+    assert (
+        client.post(
+            f"/api/admin/bonusfragen/{frage['id']}/aufloesen", json={}
+        ).status_code
+        == 422
+    )
+
+
 def test_override_ueberdauert_api_sync(client, conn, einstellungen):
     """Kern der Mergelogik (SPEC 3.5): admin > api, bis der Override aufgehoben wird."""
     beendet = _api_match()

@@ -68,25 +68,43 @@ def tipp_abgeben(
 
 
 def aufloesen(
-    conn: sqlite3.Connection, *, bonusfrage_id: int, aufloesung_ref: int, akteur: str
+    conn: sqlite3.Connection, *, bonusfrage_id: int, aufloesung_refs: list[int], akteur: str
 ) -> int:
-    """Setzt die richtige Antwort und vergibt die Punkte; liefert gewertete Tipps."""
+    """Setzt die richtige(n) Antwort(en) und vergibt Punkte; liefert gewertete Tipps.
+
+    Mehrere richtige Antworten (v0.2) decken Fragen wie „Wer erreicht das
+    Halbfinale?" ab — jeder Tipp auf eine der Antworten bekommt die vollen
+    Punkte. Erneutes Auflösen ersetzt die alte Wertung (Korrekturen). Die
+    Legacy-Spalte aufloesung_ref hält weiter den „ist aufgelöst?"-Zustand.
+    """
     frage = conn.execute(
         "SELECT * FROM bonusfrage WHERE id = ?", (bonusfrage_id,)
     ).fetchone()
     if frage is None:
         raise BonusFehler("Bonusfrage nicht gefunden")
-    if _antwort_name(conn, frage["typ"], aufloesung_ref) is None:
-        raise BonusFehler(f"Auflösung muss ein vorhandenes {frage['typ']}-Profil sein")
+    refs = sorted(set(aufloesung_refs))
+    if not refs:
+        raise BonusFehler("Mindestens eine richtige Antwort angeben")
+    for ref in refs:
+        if _antwort_name(conn, frage["typ"], ref) is None:
+            raise BonusFehler(f"Auflösung muss ein vorhandenes {frage['typ']}-Profil sein")
     with db.schreib_transaktion(conn):
         conn.execute(
-            "UPDATE bonusfrage SET aufloesung_ref = ? WHERE id = ?",
-            (aufloesung_ref, bonusfrage_id),
+            "DELETE FROM bonusfrage_aufloesung WHERE bonusfrage_id = ?", (bonusfrage_id,)
         )
+        conn.executemany(
+            "INSERT INTO bonusfrage_aufloesung (bonusfrage_id, ref) VALUES (?, ?)",
+            [(bonusfrage_id, ref) for ref in refs],
+        )
+        conn.execute(
+            "UPDATE bonusfrage SET aufloesung_ref = ? WHERE id = ?",
+            (refs[0], bonusfrage_id),
+        )
+        platzhalter = ",".join("?" for _ in refs)
         gewertet = conn.execute(
-            "UPDATE bonustipp SET punkte = CASE WHEN antwort_ref = ? THEN ? ELSE 0 END"
-            " WHERE bonusfrage_id = ?",
-            (aufloesung_ref, frage["punkte_wert"], bonusfrage_id),
+            f"UPDATE bonustipp SET punkte = CASE WHEN antwort_ref IN ({platzhalter})"
+            " THEN ? ELSE 0 END WHERE bonusfrage_id = ?",
+            (*refs, frage["punkte_wert"], bonusfrage_id),
         ).rowcount
         db.change_log_eintrag(
             conn,
@@ -94,12 +112,23 @@ def aufloesen(
             entitaet_id=bonusfrage_id,
             feld="aufloesung_ref",
             alt_wert=frage["aufloesung_ref"],
-            neu_wert=aufloesung_ref,
+            neu_wert=",".join(str(ref) for ref in refs),
             quelle="admin",
             akteur=akteur,
             zeitpunkt_utc=jetzt_iso(),
         )
     return gewertet
+
+
+def _aufloesung_refs(conn: sqlite3.Connection, frage: sqlite3.Row) -> list[int]:
+    """Alle richtigen Antworten einer Frage (neue Tabelle, Fallback Legacy-Spalte)."""
+    zeilen = conn.execute(
+        "SELECT ref FROM bonusfrage_aufloesung WHERE bonusfrage_id = ? ORDER BY ref",
+        (frage["id"],),
+    ).fetchall()
+    if zeilen:
+        return [zeile["ref"] for zeile in zeilen]
+    return [frage["aufloesung_ref"]] if frage["aufloesung_ref"] is not None else []
 
 
 def fragen_fuer_nutzer(
@@ -116,6 +145,13 @@ def fragen_fuer_nutzer(
     ergebnis = []
     for frage in fragen:
         offen = jetzt < frage["einsendeschluss_utc"] and frage["aufloesung_ref"] is None
+        # Mehrfach-Auflösung (v0.2): alle richtigen Antworten; aufloesung_name
+        # bleibt als verbundener Anzeigetext erhalten („Spanien, Frankreich, …").
+        namen = [
+            name
+            for ref in _aufloesung_refs(conn, frage)
+            if (name := _antwort_name(conn, frage["typ"], ref)) is not None
+        ]
         eintrag: dict[str, Any] = {
             "id": frage["id"],
             "frage": frage["frage"],
@@ -124,7 +160,8 @@ def fragen_fuer_nutzer(
             "einsendeschluss_utc": frage["einsendeschluss_utc"],
             "offen": offen,
             "aufloesung_ref": frage["aufloesung_ref"],
-            "aufloesung_name": _antwort_name(conn, frage["typ"], frage["aufloesung_ref"]),
+            "aufloesung_namen": namen,
+            "aufloesung_name": ", ".join(namen) if namen else None,
             "mein_tipp": None,
             "tipps": [],
         }

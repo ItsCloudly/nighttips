@@ -429,7 +429,10 @@ class BonusfrageEingabe(BaseModel):
 
 
 class BonusAufloesung(BaseModel):
-    aufloesung_ref: int
+    # Eine richtige Antwort (klassisch) ODER mehrere (v0.2 — z. B. die vier
+    # Halbfinalisten). Mindestens eins von beiden muss gesetzt sein.
+    aufloesung_ref: int | None = None
+    aufloesung_refs: list[int] | None = Field(default=None, min_length=1, max_length=16)
 
 
 @router.get("/feeds")
@@ -521,11 +524,16 @@ def bonusfrage_aufloesen(
     admin: Annotated[sqlite3.Row, Depends(admin_nutzer)],
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
 ) -> dict[str, Any]:
+    refs = daten.aufloesung_refs or (
+        [daten.aufloesung_ref] if daten.aufloesung_ref is not None else []
+    )
+    if not refs:
+        raise HTTPException(status_code=422, detail="Keine richtige Antwort angegeben")
     try:
         gewertet = bonus.aufloesen(
             conn,
             bonusfrage_id=frage_id,
-            aufloesung_ref=daten.aufloesung_ref,
+            aufloesung_refs=refs,
             akteur=admin["anzeigename"],
         )
     except bonus.BonusFehler as fehler:

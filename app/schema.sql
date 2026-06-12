@@ -447,3 +447,11 @@ CREATE TABLE IF NOT EXISTS nachricht_reaktion (
     erstellt_utc TEXT NOT NULL,
     PRIMARY KEY (nachricht_id, nutzer_id)
 );
+-- Mehrfach-Aufloesung fuer Bonusfragen (v0.2): z. B. die vier Halbfinalisten.
+-- Die Legacy-Spalte bonusfrage.aufloesung_ref bleibt gesetzt (erste richtige
+-- Antwort) und traegt weiter den "ist aufgeloest?"-Zustand.
+CREATE TABLE IF NOT EXISTS bonusfrage_aufloesung (
+    bonusfrage_id INTEGER NOT NULL REFERENCES bonusfrage(id) ON DELETE CASCADE,
+    ref           INTEGER NOT NULL,
+    PRIMARY KEY (bonusfrage_id, ref)
+);
