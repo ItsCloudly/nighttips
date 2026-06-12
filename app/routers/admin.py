@@ -76,6 +76,9 @@ class NutzerAenderung(BaseModel):
     ki_freigeschaltet: bool | None = None
     rangliste_sichtbar: bool | None = None
     pin: str | None = Field(default=None, min_length=PIN_MIN_NEU, max_length=32)
+    # Rolle umhängen (v0.2): nur admin/mitglied — KI-Konten entstehen
+    # ausschließlich über die Nutzeranlage und bleiben KI.
+    rolle: str | None = Field(default=None, pattern="^(admin|mitglied)$")
 
 
 @router.patch("/nutzer/{nutzer_id}")
@@ -85,7 +88,7 @@ def nutzer_aendern(
     admin: Annotated[sqlite3.Row, Depends(admin_nutzer)],
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
 ) -> dict[str, Any]:
-    """KI-Wertung/Ranglisten-Sichtbarkeit umschalten und/oder PIN zurücksetzen."""
+    """KI-Wertung/Sichtbarkeit/Rolle umschalten und/oder PIN zurücksetzen."""
     if daten.pin is not None:
         try:
             nutzer_service.pin_validieren(daten.pin)
@@ -115,6 +118,34 @@ def nutzer_aendern(
                 feld="rangliste_sichtbar",
                 alt_wert=ziel["rangliste_sichtbar"],
                 neu_wert=1 if daten.rangliste_sichtbar else 0,
+                quelle="admin",
+                akteur=admin["anzeigename"],
+                zeitpunkt_utc=jetzt,
+            )
+        if daten.rolle is not None and ziel["rolle"] != daten.rolle:
+            if ziel["rolle"] == "ki":
+                raise HTTPException(status_code=409, detail="KI-Konten behalten ihre Rolle.")
+            if ziel["rolle"] == "admin":
+                admins = conn.execute(
+                    "SELECT COUNT(*) AS anzahl FROM nutzer WHERE rolle = 'admin'"
+                ).fetchone()["anzahl"]
+                if admins <= 1:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Der letzte Admin kann nicht zurückgestuft werden.",
+                    )
+            conn.execute("UPDATE nutzer SET rolle = ? WHERE id = ?", (daten.rolle, nutzer_id))
+            # Rollenwechsel beendet bestehende Sitzungen: ein zurückgestufter
+            # Admin soll nicht mit alter Session weiter Admin-Endpunkte sehen
+            # (das Frontend blendet nach Neuanmeldung den Admin-Tab aus).
+            conn.execute("DELETE FROM sitzung WHERE nutzer_id = ?", (nutzer_id,))
+            db.change_log_eintrag(
+                conn,
+                entitaet="nutzer",
+                entitaet_id=nutzer_id,
+                feld="rolle",
+                alt_wert=ziel["rolle"],
+                neu_wert=daten.rolle,
                 quelle="admin",
                 akteur=admin["anzeigename"],
                 zeitpunkt_utc=jetzt,

@@ -112,44 +112,48 @@
     </section>
 
     <section id="view-spiele" class="view" hidden>
-      <header class="seitenkopf">
+      <header class="seitenkopf seitenkopf-kompakt">
         <div class="kopfzeile">
           <h1>Spiele</h1>
         </div>
-        <details id="spieleKalender" class="kalender">
-          <summary id="kalenderZusammenfassung" class="kalender-kopf"></summary>
-          <div class="kalender-blatt">
-            <div class="kalender-nav">
-              <button type="button" id="kalenderZurueck" class="kalender-pfeil"
-                      aria-label="Voriger Monat"></button>
-              <span id="kalenderMonat" class="kalender-monat"></span>
-              <button type="button" id="kalenderVor" class="kalender-pfeil vor"
-                      aria-label="Nächster Monat"></button>
-            </div>
-            <div class="kalender-wochentage" aria-hidden="true">
-              <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span>
-              <span>Fr</span><span>Sa</span><span>So</span>
-            </div>
-            <div id="kalenderTage" class="kalender-tage" aria-label="Spieltag wählen"></div>
-            <button type="button" id="kalenderAlle" class="kalender-alle" hidden>
-              Alle Tage anzeigen</button>
-          </div>
-        </details>
-        <div class="filterzeile">
-          <div class="segmente klein" id="spieleFilterStatus" role="tablist" aria-label="Nach Status filtern">
-            <button data-status="alle" class="aktiv" role="tab" aria-selected="true">Alle</button>
-            <button data-status="live" role="tab" aria-selected="false">Live</button>
-            <button data-status="anstehend" role="tab" aria-selected="false">Anstehend</button>
-            <button data-status="beendet" role="tab" aria-selected="false">Beendet</button>
-            <button data-status="gepinnt" role="tab" aria-selected="false">★</button>
-          </div>
-          <select id="filterGruppe" aria-label="Nach Runde filtern">
-            <option value="">Alle Runden</option>
-          </select>
-          <button type="button" id="filterTeamKnopf" class="team-filter-knopf"
-                  aria-label="Nach Team filtern" title="Nach Team filtern"></button>
-        </div>
       </header>
+      <!-- Außerhalb des Headers, damit position:sticky über die ganze
+           Section trägt (im Header endete der Klebebereich sofort). -->
+      <div class="spiele-filter-block">
+          <details id="spieleKalender" class="kalender">
+            <summary id="kalenderZusammenfassung" class="kalender-kopf"></summary>
+            <div class="kalender-blatt">
+              <div class="kalender-nav">
+                <button type="button" id="kalenderZurueck" class="kalender-pfeil"
+                        aria-label="Voriger Monat"></button>
+                <span id="kalenderMonat" class="kalender-monat"></span>
+                <button type="button" id="kalenderVor" class="kalender-pfeil vor"
+                        aria-label="Nächster Monat"></button>
+              </div>
+              <div class="kalender-wochentage" aria-hidden="true">
+                <span>Mo</span><span>Di</span><span>Mi</span><span>Do</span>
+                <span>Fr</span><span>Sa</span><span>So</span>
+              </div>
+              <div id="kalenderTage" class="kalender-tage" aria-label="Spieltag wählen"></div>
+              <button type="button" id="kalenderAlle" class="kalender-alle" hidden>
+                Alle Tage anzeigen</button>
+            </div>
+          </details>
+          <div class="filterzeile">
+            <div class="segmente klein" id="spieleFilterStatus" role="tablist" aria-label="Nach Status filtern">
+              <button data-status="alle" class="aktiv" role="tab" aria-selected="true">Alle</button>
+              <button data-status="live" role="tab" aria-selected="false">Live</button>
+              <button data-status="anstehend" role="tab" aria-selected="false">Anstehend</button>
+              <button data-status="beendet" role="tab" aria-selected="false">Beendet</button>
+              <button data-status="gepinnt" role="tab" aria-selected="false">★</button>
+            </div>
+            <select id="filterGruppe" aria-label="Nach Runde filtern">
+              <option value="">Alle Runden</option>
+            </select>
+            <button type="button" id="filterTeamKnopf" class="team-filter-knopf"
+                    aria-label="Nach Team filtern" title="Nach Team filtern"></button>
+          </div>
+      </div>
       <div id="spieleListe" class="liste"></div>
     </section>
 

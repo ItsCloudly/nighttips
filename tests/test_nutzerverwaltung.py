@@ -148,6 +148,59 @@ def test_pin_reset_validierung(admin_client, conn):
     assert antwort.status_code == 422
 
 
+def test_rolle_vergeben_und_entziehen(admin_client, conn):
+    """Mitglied → Admin → Mitglied (v0.2). Der Entzug beendet alle Sitzungen."""
+    mia_id = _nutzer_id(conn, "Mia")
+    antwort = admin_client.patch(f"/api/admin/nutzer/{mia_id}", json={"rolle": "admin"})
+    assert antwort.status_code == 200
+    assert antwort.json()["rolle"] == "admin"
+
+    # Mia bekommt eine echte Sitzung (Login legt eine Session-Zeile an;
+    # der erneute Alex-Login ersetzt nur das Cookie, nicht Mias Zeile)
+    admin_client.post("/api/login", json={"anzeigename": "Mia", "pin": "1234"})
+    admin_client.post("/api/login", json={"anzeigename": "Alex", "pin": "1234"})
+    sitzungen = lambda: conn.execute(  # noqa: E731
+        "SELECT COUNT(*) AS n FROM sitzung WHERE nutzer_id = ?", (mia_id,)
+    ).fetchone()["n"]
+    assert sitzungen() >= 1
+    antwort = admin_client.patch(f"/api/admin/nutzer/{mia_id}", json={"rolle": "mitglied"})
+    assert antwort.status_code == 200
+    assert antwort.json()["rolle"] == "mitglied"
+    assert sitzungen() == 0
+    # Historie festgehalten
+    eintraege = conn.execute(
+        "SELECT alt_wert, neu_wert FROM change_log WHERE entitaet = 'nutzer'"
+        " AND feld = 'rolle' AND entitaet_id = ? ORDER BY id",
+        (mia_id,),
+    ).fetchall()
+    assert [(z["alt_wert"], z["neu_wert"]) for z in eintraege] == [
+        ("mitglied", "admin"),
+        ("admin", "mitglied"),
+    ]
+
+
+def test_letzter_admin_nicht_degradierbar(admin_client, conn):
+    alex_id = _nutzer_id(conn, "Alex")
+    antwort = admin_client.patch(f"/api/admin/nutzer/{alex_id}", json={"rolle": "mitglied"})
+    assert antwort.status_code == 409
+    assert "letzte Admin" in antwort.json()["detail"]
+
+
+def test_ki_konto_behaelt_rolle(admin_client, conn):
+    nutzer_service.nutzer_anlegen(conn, anzeigename="Orakel", pin="1234", rolle="ki", akteur="t")
+    conn.commit()
+    orakel_id = _nutzer_id(conn, "Orakel")
+    antwort = admin_client.patch(f"/api/admin/nutzer/{orakel_id}", json={"rolle": "mitglied"})
+    assert antwort.status_code == 409
+
+
+def test_rolle_validierung(admin_client, conn):
+    mia_id = _nutzer_id(conn, "Mia")
+    assert (
+        admin_client.patch(f"/api/admin/nutzer/{mia_id}", json={"rolle": "ki"}).status_code == 422
+    )
+
+
 def test_nutzer_loeschen(admin_client, conn):
     mia_id = _nutzer_id(conn, "Mia")
     assert admin_client.delete(f"/api/admin/nutzer/{mia_id}").status_code == 204

@@ -122,9 +122,11 @@ def feed_abrufen(conn: sqlite3.Connection, feed: sqlite3.Row, *, xml_text: str |
         schema = urlparse(feed["url"]).scheme
         if schema not in ("http", "https"):
             raise ValueError(f"Feed-URL mit unzulässigem Schema: {schema}")
+        # Ehrlicher Bot-UA im "Mozilla/5.0 (compatible; …)"-Muster: manche
+        # Verlags-CDNs (Spiegel, FAZ) filtern nackte Tool-UAs aus.
         antwort = httpx.get(
             feed["url"], timeout=15.0, follow_redirects=True,
-            headers={"User-Agent": "wm26-app/1.0 (+rss)"},
+            headers={"User-Agent": "Mozilla/5.0 (compatible; wm26-app/1.0; +rss)"},
         )
         antwort.raise_for_status()
         xml_text = antwort.text

@@ -33,9 +33,13 @@ const SHELL = [
   "/illustrationen/ki-chip.webp",
   "/illustrationen/stadium-hero.webp",
   "/illustrationen/news-fallback.webp",
-  // Quellen-Logos der News-Feeds (v0.1.2)
+  // Quellen-Logos der News-Feeds (v0.1.2, erweitert in v0.2)
   "/icons/quellen/sportschau.png",
   "/icons/quellen/kicker.png",
+  "/icons/quellen/spiegel.png",
+  "/icons/quellen/zdfheute.png",
+  "/icons/quellen/11freunde.png",
+  "/icons/quellen/faz.png",
 ];
 
 self.addEventListener("install", (ereignis) => {

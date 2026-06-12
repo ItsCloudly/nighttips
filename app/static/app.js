@@ -141,9 +141,21 @@ const ANSICHTEN = ["login", "onboarding", "heute", "spiele", "rangliste", "bonus
 // Teams/News leben unter "Mehr", Bonusfragen unter "Heute" — der Tab bleibt aktiv markiert
 const NAV_ZUORDNUNG = { teams: "mehr", news: "mehr", bonus: "heute" };
 
-function zeigeAnsicht(name) {
+function zeigeAnsicht(name, wischRichtung = null) {
   for (const ansicht of ANSICHTEN) {
     el(`view-${ansicht}`).hidden = ansicht !== name;
+  }
+  // Nach einem Wisch gleitet die neue Ansicht aus der Wischrichtung herein;
+  // die Klasse räumt sich nach der Animation selbst weg (Standard bleibt
+  // das sanfte Aufsteigen von view-ein).
+  if (wischRichtung) {
+    const ansicht = el(`view-${name}`);
+    ansicht.classList.add(`wechsel-${wischRichtung}`);
+    ansicht.addEventListener(
+      "animationend",
+      () => ansicht.classList.remove("wechsel-links", "wechsel-rechts"),
+      { once: true }
+    );
   }
   el("leiste").hidden = name === "login" || name === "onboarding";
   const navName = NAV_ZUORDNUNG[name] ?? name;
@@ -151,6 +163,7 @@ function zeigeAnsicht(name) {
     knopf.classList.toggle("aktiv", knopf.dataset.view === navName);
   }
   window.scrollTo(0, 0);
+  if (name === "spiele") spieleAktuellesAnzeigen();
   if (name === "heute") heuteRendern().catch(fehlerAnzeigen);
   if (name === "rangliste") ranglisteLaden().catch(fehlerAnzeigen);
   if (name === "bonus") bonusfragenLaden().catch(fehlerAnzeigen);
@@ -158,6 +171,88 @@ function zeigeAnsicht(name) {
   if (name === "teams") teamsRendern();
   if (name === "news") newsLaden().catch(fehlerAnzeigen);
   if (name === "mehr") verwaltungLaden().catch(fehlerAnzeigen);
+}
+
+/* Beim Wechsel in den Spiele-Tab zum aktuellen Stand springen (v0.2):
+   erstes Live-Spiel, sonst das zuletzt beendete — wenn das halbe Turnier
+   vorbei ist, startet die Liste also nicht mehr ganz oben. Nur in der
+   ungefilterten Standardansicht; wer filtert, will oben anfangen. */
+function spieleAktuellesAnzeigen() {
+  const standard =
+    zustand.filterStatus === "alle" && !zustand.filterGruppe && !zustand.filterTeam;
+  if (!standard || zustand.spieleTag !== "alle") return;
+  const live = zustand.spiele.find((s) => s.status === "live" || s.status === "halbzeit");
+  const beendete = zustand.spiele.filter((s) => s.status === "beendet");
+  const ziel = live ?? beendete[beendete.length - 1];
+  if (!ziel) return;
+  const karte = document.querySelector(`#spieleListe .spiel[data-spiel="${ziel.id}"]`);
+  if (!karte) return;
+  // Sticky-Filterblock einrechnen, sonst verschwindet die Karte darunter
+  const versatz = (document.querySelector(".spiele-filter-block")?.offsetHeight ?? 0) + 8;
+  window.scrollTo(0, Math.max(0, karte.getBoundingClientRect().top + window.scrollY - versatz));
+}
+
+/* ---------- Wisch-Navigation zwischen den Haupt-Tabs (v0.2) ----------
+
+   Daumen-Wisch nach links/rechts wechselt zum Nachbar-Tab (Reihenfolge der
+   Nav-Leiste, ohne Umlauf). Nur echte Touch-Gesten; ausgenommen sind die
+   Lupe, Formularfelder und alles in horizontal scrollbaren Bereichen
+   (kommende-Spiele-Leiste, K.o.-Baum-Bühne, Tag-Leisten). */
+
+const WISCH_TABS = ["heute", "spiele", "turnier", "rangliste", "mehr"];
+
+function aktiverWischTab() {
+  // Unteransichten (Bonusfragen, News, Teams) und Login/Onboarding wischen
+  // bewusst nicht — dort führt die Geste eher zu Versehen als zu Komfort.
+  return WISCH_TABS.find((name) => !el(`view-${name}`).hidden) ?? null;
+}
+
+function wischNavigationEinrichten() {
+  const flaeche = document.querySelector("main");
+  let start = null;
+
+  const inHorizontalScroller = (knoten) => {
+    for (let element = knoten; element && element !== flaeche; element = element.parentElement) {
+      if (element.scrollWidth > element.clientWidth + 4) return true;
+    }
+    return false;
+  };
+
+  flaeche.addEventListener(
+    "pointerdown",
+    (ereignis) => {
+      start = null;
+      if (ereignis.pointerType !== "touch" || !ereignis.isPrimary) return;
+      if (!el("lupe").hidden) return;
+      if (ereignis.target.closest("input, textarea, select")) return;
+      if (!aktiverWischTab()) return;
+      if (inHorizontalScroller(ereignis.target)) return;
+      start = { x: ereignis.clientX, y: ereignis.clientY, id: ereignis.pointerId };
+    },
+    { passive: true }
+  );
+
+  flaeche.addEventListener(
+    "pointerup",
+    (ereignis) => {
+      if (!start || ereignis.pointerId !== start.id) return;
+      const dx = ereignis.clientX - start.x;
+      const dy = ereignis.clientY - start.y;
+      start = null;
+      // Deutlich horizontal: mindestens 48 px seitlich, kaum vertikale Drift
+      if (Math.abs(dx) < 48 || Math.abs(dy) > 40 || Math.abs(dx) < Math.abs(dy) * 2) return;
+      const aktuell = aktiverWischTab();
+      if (!aktuell) return;
+      const index = WISCH_TABS.indexOf(aktuell) + (dx < 0 ? 1 : -1);
+      if (index < 0 || index >= WISCH_TABS.length) return;
+      zeigeAnsicht(WISCH_TABS[index], dx < 0 ? "links" : "rechts");
+    },
+    { passive: true }
+  );
+
+  flaeche.addEventListener("pointercancel", () => {
+    start = null;
+  }, { passive: true });
 }
 
 /* Setzt innerHTML nur bei tatsächlicher Änderung. Verhindert, dass die
@@ -2752,6 +2847,10 @@ async function newsLaden() {
 const QUELLEN_LOGOS = [
   { muster: /sportschau/i, bild: "/icons/quellen/sportschau.png" },
   { muster: /kicker/i, bild: "/icons/quellen/kicker.png" },
+  { muster: /spiegel/i, bild: "/icons/quellen/spiegel.png" },
+  { muster: /zdf/i, bild: "/icons/quellen/zdfheute.png" },
+  { muster: /11.?freunde/i, bild: "/icons/quellen/11freunde.png" },
+  { muster: /faz|frankfurter allgemeine/i, bild: "/icons/quellen/faz.png" },
 ];
 
 function quellenLogoHtml(feedTitel) {
@@ -3428,6 +3527,16 @@ async function nutzerLaden() {
             ? `<button class="klein gefahr" data-nutzer-bild="${person.id}"
                  data-nutzer-name="${escapeHtml(person.anzeigename)}">Bild löschen</button>`
             : "";
+          // Rolle umhängen (v0.2): KI-Konten bleiben KI, der letzte Admin
+          // wird serverseitig geschützt (409).
+          const rolleKnopf =
+            person.rolle === "ki"
+              ? ""
+              : person.rolle === "admin"
+                ? `<button class="klein gefahr" data-nutzer-rolle="${person.id}" data-rolle-neu="mitglied"
+                     data-nutzer-name="${escapeHtml(person.anzeigename)}">Admin entziehen</button>`
+                : `<button class="klein" data-nutzer-rolle="${person.id}" data-rolle-neu="admin"
+                     data-nutzer-name="${escapeHtml(person.anzeigename)}">Zum Admin machen</button>`;
           return `<div class="verwaltungszeile">
             <span>${escapeHtml(person.anzeigename)}<span class="rollen-chip ${person.rolle}">${person.rolle}</span>${
               ich ? ' <span class="neben">(du)</span>' : ""
@@ -3435,6 +3544,7 @@ async function nutzerLaden() {
             <span class="fuss-knoepfe">
               ${kiKnopf}
               ${sichtbarKnopf}
+              ${rolleKnopf}
               ${bildKnopf}
               <button class="klein" data-nutzer-pin="${person.id}"
                 data-nutzer-name="${escapeHtml(person.anzeigename)}">PIN</button>
@@ -3821,6 +3931,7 @@ function mehrEreignisse() {
   el("nutzerListe").addEventListener("click", async (ereignis) => {
     const kiKnopf = ereignis.target.closest("[data-nutzer-ki]");
     const sichtbarKnopf = ereignis.target.closest("[data-nutzer-sichtbar]");
+    const rolleKnopf = ereignis.target.closest("[data-nutzer-rolle]");
     const bildKnopf = ereignis.target.closest("[data-nutzer-bild]");
     const pinResetKnopf = ereignis.target.closest("[data-nutzer-pin]");
     const loeschKnopf = ereignis.target.closest("[data-nutzer-loeschen]");
@@ -3841,6 +3952,22 @@ function mehrEreignisse() {
           sichtbarKnopf.dataset.sichtbarNeu === "1"
             ? "Konto zählt wieder in der Rangliste ✓"
             : "Konto aus Rangliste & Co. ausgeblendet"
+        );
+        await nutzerLaden();
+      } else if (
+        rolleKnopf &&
+        confirm(
+          rolleKnopf.dataset.rolleNeu === "admin"
+            ? `'${rolleKnopf.dataset.nutzerName}' zum Admin machen?`
+            : `'${rolleKnopf.dataset.nutzerName}' die Adminrechte entziehen? Das Konto wird dabei überall abgemeldet.`
+        )
+      ) {
+        await api(`/api/admin/nutzer/${rolleKnopf.dataset.nutzerRolle}`, {
+          method: "PATCH",
+          body: JSON.stringify({ rolle: rolleKnopf.dataset.rolleNeu }),
+        });
+        toast(
+          rolleKnopf.dataset.rolleNeu === "admin" ? "Adminrechte vergeben ✓" : "Adminrechte entzogen"
         );
         await nutzerLaden();
       } else if (
@@ -4034,6 +4161,7 @@ async function start() {
   for (const knopf of document.querySelectorAll("#leiste button")) {
     knopf.addEventListener("click", () => zeigeAnsicht(knopf.dataset.view));
   }
+  wischNavigationEinrichten();
   spieleEreignisse();
   heuteEreignisse();
   ranglisteEreignisse();

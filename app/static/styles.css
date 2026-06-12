@@ -196,12 +196,49 @@ main .view:not([hidden]) { animation: view-ein 0.3s var(--ease-aus) both; }
   to { opacity: 1; transform: none; }
 }
 
+/* Wisch-Navigation (v0.2): die neue Ansicht gleitet aus der Wischrichtung
+   herein. pan-y lässt den Browser weiter vertikal scrollen, horizontale
+   Gesten gehören dem Tab-Wechsel — horizontale Scroller stellen sich ihr
+   Panning unten selbst wieder an. */
+main { touch-action: pan-y; }
+.teaser-leiste, .baum-buehne, .tag-leiste { touch-action: pan-x pan-y; }
+
+main .view.wechsel-links:not([hidden]) { animation: view-wisch-links 0.26s var(--ease-aus) both; }
+main .view.wechsel-rechts:not([hidden]) { animation: view-wisch-rechts 0.26s var(--ease-aus) both; }
+
+@keyframes view-wisch-links {
+  from { opacity: 0; transform: translateX(28px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes view-wisch-rechts {
+  from { opacity: 0; transform: translateX(-28px); }
+  to { opacity: 1; transform: none; }
+}
+
 .filterzeile {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
 }
+
+/* Spiele-Tab: Kalender + Filter bleiben beim Scrollen oben kleben (v0.2),
+   nur die Spieleliste zieht darunter durch. Weicher Verlauf statt harter
+   Kante (gleiches Muster wie die Pill-Tabs in der Lupe). Der Block lebt
+   als Geschwister des Seitenkopfs direkt in der Section — als Kind des
+   Headers würde sticky sofort am Header-Ende abreißen. */
+.spiele-filter-block {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  padding: 2px 2px 12px;
+  margin-bottom: 4px;
+  background: linear-gradient(180deg, var(--bg) 84%, transparent);
+}
+
+/* Kompakter Seitenkopf (Spiele): das untere Polster übernimmt der Filterblock */
+.seitenkopf-kompakt { padding-bottom: 0; }
 
 select, input[type="search"], input[type="text"], input[type="password"],
 input[type="url"], input[type="number"], input[type="datetime-local"], input:not([type]),
