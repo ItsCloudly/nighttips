@@ -79,10 +79,13 @@ def fuer_nutzer(conn: sqlite3.Connection, nutzer_id: int) -> list[dict[str, Any]
     exakte = sum(1 for wert in punkte if wert == PUNKTE_EXAKT)
     treffer_serie = _laengste_serie(punkte, mindest=1)
     exakt_serie = _laengste_serie(punkte, mindest=PUNKTE_EXAKT)
+    # strftime statt datetime(): das Projekt speichert "…T…Z", datetime()
+    # liefert "… …" — der Stringvergleich wäre sonst am Schwellen-Tag
+    # systematisch falsch ('T' > ' ').
     fruehe = conn.execute(
         "SELECT COUNT(*) AS anzahl FROM tipp t JOIN spiel s ON s.id = t.spiel_id"
         " WHERE t.nutzer_id = ?"
-        " AND t.abgegeben_utc <= datetime(s.anstoss_utc, ?)",
+        " AND t.abgegeben_utc <= strftime('%Y-%m-%dT%H:%M:%SZ', s.anstoss_utc, ?)",
         (nutzer_id, f"-{FRUEH_STUNDEN} hours"),
     ).fetchone()["anzahl"]
     bonus_richtig = conn.execute(

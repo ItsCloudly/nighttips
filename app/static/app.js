@@ -1156,6 +1156,10 @@ function heuteEreignisse() {
   // das Spiel wie ein Klick.
   el("heuteInhalt").addEventListener("keydown", (ereignis) => {
     if (ereignis.key !== "Enter" && ereignis.key !== " ") return;
+    // Echte Knöpfe (z. B. die Flaggen im Hero) aktivieren sich selbst —
+    // hier nur den Hero-div bedienen, sonst öffnete Enter auf der Flagge
+    // das Spiel statt der Teaminfo.
+    if (ereignis.target.closest("button")) return;
     const ziel = ereignis.target.closest('[role="button"][data-spiel-lupe]');
     if (!ziel) return;
     ereignis.preventDefault();
@@ -1559,7 +1563,7 @@ function lupeHeroHtml(detail, phase) {
   return `<header class="lupe-hero" style="background: ${verlauf}">
     <div class="hero-meta">${escapeHtml(detail.runde)}${
       detail.stadion ? ` · ${escapeHtml(detail.stadion)}` : ""
-    } · ${lokalerTag(detail.anstoss_utc)} ${pinKnopf("spiel", detail.id)}</div>
+    } · ${lokalerTag(detail.anstoss_utc)}</div>
     <div class="lupe-duell">
       ${lupeTeamHtml(detail.heim)}
       <div class="hero-mitte">${mitte}</div>
@@ -3494,12 +3498,24 @@ async function chatOeffnen() {
 
 /* Block älterer Nachrichten oben anfügen (Scroll-Position halten). */
 async function chatAeltereLaden(knopf) {
-  if (!chatAeltesteId) return;
-  const daten = await api(`/api/chat?vor_id=${chatAeltesteId}`);
+  if (!chatAeltesteId || knopf.disabled) return;
+  // Sofort sperren: ein Doppeltipp würde denselben Block doppelt einfügen
+  knopf.disabled = true;
+  let daten;
+  try {
+    daten = await api(`/api/chat?vor_id=${chatAeltesteId}`);
+  } catch (fehler) {
+    knopf.disabled = false;
+    throw fehler;
+  }
   chatAeltesteId = daten.nachrichten[0]?.id ?? chatAeltesteId;
   const verlauf = chatVerlaufElement();
   const inhalt = el("lupeInhalt");
   const vorher = inhalt.scrollHeight;
+  // Naht glätten: fällt die Seitengrenze mitten in einen Tag, würde der
+  // alte Trenner den Tagestitel doppelt zeigen
+  const alterTrenner = verlauf.querySelector(".chat-tag");
+  const ersterAlterTag = verlauf.querySelector(".chat-nachricht")?.dataset.chatTag;
   knopf.remove();
   verlauf.insertAdjacentHTML(
     "afterbegin",
@@ -3507,6 +3523,10 @@ async function chatAeltereLaden(knopf) {
       ? '<button type="button" class="klein chat-aeltere" data-chat-aeltere>Ältere Nachrichten laden</button>'
       : "") + chatVerlaufHtml(daten.nachrichten)
   );
+  const letzteNeue = daten.nachrichten[daten.nachrichten.length - 1];
+  if (alterTrenner && letzteNeue && lokalerTag(letzteNeue.erstellt_utc) === ersterAlterTag) {
+    alterTrenner.remove();
+  }
   inhalt.scrollTop += inhalt.scrollHeight - vorher;
 }
 

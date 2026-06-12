@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from .. import db, ratelimit, security
-from ..abhaengigkeiten import aktueller_nutzer, get_db, get_einstellungen
+from ..abhaengigkeiten import aktueller_nutzer, get_db, get_einstellungen, ki_sichtbar
 from ..config import Einstellungen
 from ..modelle import NameAenderung, PinWechsel
 from ..services import abzeichen as abzeichen_service
@@ -158,8 +158,11 @@ def profil_ansehen(
     Abzeichen und die Tipp-Historie.
 
     Tipp-Geheimhaltung: Es erscheinen nur Tipps zu Spielen, deren Anpfiff
-    vorbei ist (Status != geplant) - dieselbe Fairness-Regel wie in der
-    Spiel-Lupe. Konten ausserhalb der Rangliste (rangliste_sichtbar = 0)
+    vorbei ist - dieselbe Fairness-Regel wie in der Spiel-Lupe (auch ein
+    vorab abgesagtes Spiel verraet die Tipps nicht vor der Anstosszeit).
+    KI-Gate: Das KI-Profil sehen nur Freigeschaltete (404, um die Existenz
+    nicht zu verraten); der Platz zaehlt wie in der Rangliste des
+    Betrachters. Konten ausserhalb der Rangliste (rangliste_sichtbar = 0)
     liefern keinen Platz, sind aber ansehbar.
     """
     person = conn.execute(
@@ -168,10 +171,12 @@ def profil_ansehen(
     ).fetchone()
     if person is None:
         raise HTTPException(status_code=404, detail="Nutzer nicht gefunden")
+    if person["rolle"] == "ki" and not ki_sichtbar(nutzer):
+        raise HTTPException(status_code=404, detail="Nutzer nicht gefunden")
     eintrag = next(
         (
             zeile
-            for zeile in tippspiel.rangliste(conn)
+            for zeile in tippspiel.rangliste(conn, mit_ki=ki_sichtbar(nutzer))
             if zeile["nutzer_id"] == nutzer_id
         ),
         None,
@@ -184,9 +189,9 @@ def profil_ansehen(
         " FROM tipp t JOIN spiel s ON s.id = t.spiel_id"
         " LEFT JOIN team th ON th.id = s.heim_team_id"
         " LEFT JOIN team tg ON tg.id = s.gast_team_id"
-        " WHERE t.nutzer_id = ? AND s.status != 'geplant'"
+        " WHERE t.nutzer_id = ? AND s.status != 'geplant' AND s.anstoss_utc <= ?"
         " ORDER BY s.anstoss_utc DESC, s.id DESC LIMIT 120",
-        (nutzer_id,),
+        (nutzer_id, jetzt_iso()),
     ).fetchall()
     return {
         "nutzer": {

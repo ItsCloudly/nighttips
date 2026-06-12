@@ -86,9 +86,14 @@ def reaktion_entfernen(
     nutzer: Annotated[sqlite3.Row, Depends(aktueller_nutzer)],
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
 ) -> dict[str, Any]:
-    chat.reaktion_entfernen(conn, nachricht_id=nachricht_id, nutzer_id=nutzer["id"])
-    chat.reaktionen_publizieren(conn, nachricht_id)
+    # Gleicher Schlüssel wie das Setzen: PUT und DELETE teilen das 30/Min-Budget
+    if not ratelimit.erlaubt(f"chatreaktion:{nutzer['id']}", limit=30, fenster_sekunden=60):
+        raise HTTPException(status_code=429, detail="Zu viele Reaktionen — kurz warten.")
+    # Erst die 404-Prüfung: unbekannte ids dürfen weder Schreib-Transaktion
+    # noch SSE-Broadcast auslösen.
     daten = chat.nachricht_json(conn, nachricht_id)
     if daten is None:
         raise HTTPException(status_code=404, detail="Nachricht nicht gefunden")
-    return daten
+    chat.reaktion_entfernen(conn, nachricht_id=nachricht_id, nutzer_id=nutzer["id"])
+    chat.reaktionen_publizieren(conn, nachricht_id)
+    return chat.nachricht_json(conn, nachricht_id)

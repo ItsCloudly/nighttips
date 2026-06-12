@@ -108,6 +108,32 @@ def test_reaktion_validierung(client, zwei_nutzer):
     assert client.put("/api/chat/99999/reaktion", json={"emoji": "👍"}).status_code == 404
 
 
+def test_reaktion_entfernen_404_ohne_broadcast_und_mit_ratelimit(
+    client, zwei_nutzer, monkeypatch
+):
+    """Review-Fix v0.2: unbekannte ids lösen keinen SSE-Broadcast aus, und
+    PUT + DELETE teilen sich das 30/Min-Reaktionsbudget."""
+    from app.services import live
+
+    events: list[str] = []
+    monkeypatch.setattr(live.broker, "publish", lambda ev, daten: events.append(ev))
+
+    assert client.delete("/api/chat/99999/reaktion").status_code == 404
+    assert events == []
+
+    # Der 404-DELETE oben hat bereits 1 vom 30er-Budget verbraucht (gewollt —
+    # auch Fehlversuche bremsen): 29 PUTs füllen den Rest, dann ist Schluss.
+    nachricht = client.post("/api/chat", json={"inhalt": "Budget-Test"}).json()
+    for _ in range(29):
+        assert (
+            client.put(
+                f"/api/chat/{nachricht['id']}/reaktion", json={"emoji": "👍"}
+            ).status_code
+            == 200
+        )
+    assert client.delete(f"/api/chat/{nachricht['id']}/reaktion").status_code == 429
+
+
 def test_chat_sse_publikation(client, zwei_nutzer, monkeypatch):
     """Neue Nachrichten und Reaktions-Updates gehen an den SSE-Broker."""
     from app.services import live

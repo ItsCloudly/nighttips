@@ -30,6 +30,10 @@ from urllib.parse import quote
 import httpx
 from PIL import Image
 
+# App-Module (laender-Mapping, später db) — Skript läuft aus dem Repo-Wurzelverzeichnis
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.services.laender import EXTERN_ALIAS_DE, TEAMNAMEN_DE  # noqa: E402
+
 API_BASIS = "https://www.thesportsdb.com/api/v1/json/3"
 ANFRAGE_ABSTAND = 2.1  # Sekunden — bleibt unter 30 Anfragen/Minute
 KANTE = 256
@@ -42,16 +46,45 @@ def _normalisiert(name: str) -> str:
     return "".join(c for c in zerlegt if not unicodedata.combining(c)).casefold().strip()
 
 
-def _passender_treffer(daten: dict, name: str, team_name: str) -> dict | None:
-    """Besten Kandidaten wählen: exakter Name zuerst, Fußballer bevorzugt."""
+# Deutsche Teamnamen → akzeptierte englische Schreibweisen (TheSportsDB
+# liefert strNationality auf Englisch). Beide Richtungen der App-Mappings
+# einsammeln, dazu der deutsche Name selbst (falls identisch, z. B. "Haiti").
+_ENGLISCHE_NAMEN: dict[str, set[str]] = {}
+for _en, _de in {**TEAMNAMEN_DE, **EXTERN_ALIAS_DE}.items():
+    _ENGLISCHE_NAMEN.setdefault(_normalisiert(_de), set()).add(_normalisiert(_en))
+for _de in set(TEAMNAMEN_DE.values()) | set(EXTERN_ALIAS_DE.values()):
+    _ENGLISCHE_NAMEN.setdefault(_normalisiert(_de), set()).add(_normalisiert(_de))
+
+
+def _passender_treffer(
+    daten: dict, name: str, team_name: str, geburtsdatum_db: str | None
+) -> dict | None:
+    """Besten Kandidaten wählen — im Zweifel KEINEN (lieber kein Foto als ein
+    falsches): bei Allerweltsnamen (Danilo, Rodri …) liefert die Suche
+    mehrere Fußballer, daher müssen Nationalität (gegen das laender-Mapping)
+    und, falls beidseitig bekannt, das Geburtsdatum zum DB-Spieler passen."""
     kandidaten = daten.get("player") or []
     fussballer = [k for k in kandidaten if (k.get("strSport") or "") == "Soccer"]
+    erwartet = _ENGLISCHE_NAMEN.get(_normalisiert(team_name), set())
+
+    def passt(kandidat: dict) -> bool:
+        nationalitaet = _normalisiert(kandidat.get("strNationality") or "")
+        if erwartet and nationalitaet and nationalitaet not in erwartet:
+            return False
+        geboren = (kandidat.get("dateBorn") or "").strip()
+        if geburtsdatum_db and geboren and geboren != geburtsdatum_db:
+            return False
+        return True
+
     ziel = _normalisiert(name)
-    for kandidat in fussballer:
-        if _normalisiert(kandidat.get("strPlayer") or "") == ziel:
-            return kandidat
-    # Kein exakter Treffer: einzigen Fußballer nehmen (Suche war ja namensbasiert)
-    return fussballer[0] if len(fussballer) == 1 else None
+    exakte = [k for k in fussballer if _normalisiert(k.get("strPlayer") or "") == ziel and passt(k)]
+    if len(exakte) == 1:
+        return exakte[0]
+    if len(exakte) > 1:
+        return None  # mehrdeutig trotz Prüfungen — nicht raten
+    # Kein exakter Treffer: einzigen passenden Fußballer nehmen
+    passende = [k for k in fussballer if passt(k)]
+    return passende[0] if len(passende) == 1 else None
 
 
 def _foto_holen(client: httpx.Client, url: str) -> bytes | None:
@@ -94,7 +127,6 @@ def main() -> int:
 
     # App-Verbindung samt Migrationen (foto-Spalte) — das Skript läuft damit
     # auch gegen eine DB, die der neue App-Code noch nie geöffnet hat.
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from app import db as app_db
 
     conn = app_db.verbinden(db_pfad)
@@ -127,7 +159,9 @@ def main() -> int:
                     print("  Rate-Limit (429) — 60 s Pause"); time.sleep(60)
                     continue
                 antwort.raise_for_status()
-                treffer = _passender_treffer(antwort.json(), spieler["name"], spieler["team_name"])
+                treffer = _passender_treffer(
+                    antwort.json(), spieler["name"], spieler["team_name"], spieler["geburtsdatum"]
+                )
                 if treffer is None:
                     ohne_treffer += 1
                     print(f"[{index}/{len(offene)}] {spieler['name']} ({spieler['fifa_code']}): kein Treffer")

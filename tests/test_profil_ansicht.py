@@ -101,6 +101,40 @@ def test_profil_unbekannt_und_auth(client, welt):
     assert client.get("/api/profil/99999").status_code == 404
 
 
+def test_profil_ki_gate(client, conn, welt):
+    """Review-Fix v0.2: das KI-Profil sehen nur Freigeschaltete (sonst 404)."""
+    nutzer_service.nutzer_anlegen(conn, anzeigename="Orakel", pin="123456", rolle="ki", akteur="t")
+    conn.commit()
+    ki_id = conn.execute(
+        "SELECT id FROM nutzer WHERE anzeigename = 'Orakel'"
+    ).fetchone()["id"]
+    _als(client, "Mia")  # nicht freigeschaltet
+    assert client.get(f"/api/profil/{ki_id}").status_code == 404
+    _als(client, "Chef")  # Admin sieht die KI
+    assert client.get(f"/api/profil/{ki_id}").status_code == 200
+
+
+def test_profil_verbirgt_abgesagtes_spiel_vor_anstoss(client, conn, welt):
+    """Review-Fix v0.2: Absage vor Anpfiff verrät die Tipps nicht vorzeitig."""
+    conn.execute("UPDATE spiel SET status='abgesagt' WHERE anstoss_utc = ?", (ZUKUNFT,))
+    conn.commit()
+    _als(client, "Chef")
+    profil = client.get(f"/api/profil/{welt['ids']['Mia']}").json()
+    assert len(profil["tipps"]) == 2  # weiterhin nur die zwei gespielten
+
+
+def test_abzeichen_frueher_vogel_am_schwellen_tag(conn, welt):
+    """Review-Fix v0.2: 26 h vor Anstoß zählt auch dann, wenn Abgabe und
+    24-h-Schwelle auf denselben Kalendertag fallen (datetime()-Formatfalle)."""
+    conn.execute(
+        "UPDATE tipp SET abgegeben_utc = '2030-06-14T16:00:00Z' WHERE spiel_id = ?",
+        (welt["spiele"][ZUKUNFT],),
+    )
+    conn.commit()
+    eintraege = {a["schluessel"]: a for a in abzeichen.fuer_nutzer(conn, welt["ids"]["Mia"])}
+    assert eintraege["frueher_vogel"]["wert"] == 1
+
+
 def test_abzeichen_serien(conn, welt):
     """Serien zählen aufeinanderfolgende gewertete Tipps in Spielreihenfolge."""
     eintraege = {a["schluessel"]: a for a in abzeichen.fuer_nutzer(conn, welt["ids"]["Mia"])}
