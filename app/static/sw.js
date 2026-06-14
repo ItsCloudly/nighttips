@@ -3,7 +3,7 @@
 
 // Eine Versionsnummer für Cache UND Assets — bei Frontend-Änderungen hochzählen
 // (muss zu den ?v=-Parametern in index.html passen).
-const VERSION = "47";
+const VERSION = "48";
 const CACHE_NAME = `wm26-v${VERSION}`;
 const SHELL = [
   "/",

@@ -3982,6 +3982,13 @@ function mehrTabAnwenden() {
    neueste oben und aufgeklappt. Rein statisch im Frontend gepflegt. */
 const CHANGELOG = [
   {
+    version: "0.3.3",
+    datum: "14. Juni 2026",
+    punkte: [
+      "Android-App: Benachrichtigungen lassen sich jetzt ohne Absturz aktivieren.",
+    ],
+  },
+  {
     version: "0.3.2",
     datum: "14. Juni 2026",
     punkte: [
