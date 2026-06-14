@@ -392,7 +392,15 @@ async function pinUmschalten(typ, refId) {
     await api(`/api/pins/${typ}/${refId}`, { method: gesetzt ? "DELETE" : "PUT" });
     if (gesetzt) zustand.pins[typ].delete(refId);
     else zustand.pins[typ].add(refId);
-    if (!gesetzt && Notification?.permission === "default" && !zustand.pushAktiv) {
+    // v0.3.4: window.Notification statt Notification — in der Android-WebView ist
+    // das globale Notification GAR NICHT definiert, und optional chaining (?.) fängt
+    // ein undeklariertes Global nicht ab ("Notification is not defined"). Nativ den
+    // Hinweis über WM26_NATIV zeigen (dort gibt es kein Web-Notification-Konzept).
+    if (
+      !gesetzt &&
+      !zustand.pushAktiv &&
+      (window.WM26_NATIV || window.Notification?.permission === "default")
+    ) {
       toast("Tipp: Aktiviere Push unter „Mehr“ — Anstoß- und Tor-Alarm für deine Teams 📣");
     }
   } catch (fehler) {
@@ -3981,6 +3989,13 @@ function mehrTabAnwenden() {
 /* Patchnotizen (v0.3): kurze, verständliche Liste der Neuerungen je Version —
    neueste oben und aufgeklappt. Rein statisch im Frontend gepflegt. */
 const CHANGELOG = [
+  {
+    version: "0.3.4",
+    datum: "14. Juni 2026",
+    punkte: [
+      "Android-App: Lieblingsteam als Favorit markieren funktioniert wieder (Notification-Fehler behoben).",
+    ],
+  },
   {
     version: "0.3.3",
     datum: "14. Juni 2026",
