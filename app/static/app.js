@@ -177,7 +177,13 @@ function zeigeAnsicht(name, wischRichtung = null) {
    erstes Live-Spiel, sonst das zuletzt beendete — wenn das halbe Turnier
    vorbei ist, startet die Liste also nicht mehr ganz oben. Nur in der
    ungefilterten Standardansicht; wer filtert, will oben anfangen. */
+let spieleKopfLetzteY = 0;
+
 function spieleAktuellesAnzeigen() {
+  // Beim Betreten den Titel wieder zeigen und die Scroll-Basis zurücksetzen (v0.3)
+  const kopf = document.querySelector(".spiele-kopf");
+  if (kopf) kopf.classList.remove("titel-weg");
+  spieleKopfLetzteY = window.scrollY;
   const standard =
     zustand.filterStatus === "alle" && !zustand.filterGruppe && !zustand.filterTeam;
   if (!standard || zustand.spieleTag !== "alle") return;
@@ -187,9 +193,44 @@ function spieleAktuellesAnzeigen() {
   if (!ziel) return;
   const karte = document.querySelector(`#spieleListe .spiel[data-spiel="${ziel.id}"]`);
   if (!karte) return;
-  // Sticky-Filterblock einrechnen, sonst verschwindet die Karte darunter
-  const versatz = (document.querySelector(".spiele-filter-block")?.offsetHeight ?? 0) + 8;
-  window.scrollTo(0, Math.max(0, karte.getBoundingClientRect().top + window.scrollY - versatz));
+  // Sticky-Kopf (Titel + Filterblock) einrechnen, sonst verschwindet die Karte darunter
+  const versatz = (document.querySelector(".spiele-kopf")?.offsetHeight ?? 0) + 8;
+  const zielY = Math.max(0, karte.getBoundingClientRect().top + window.scrollY - versatz);
+  // Basis VOR dem Sprung auf das Ziel setzen: das daraus folgende Scroll-Event
+  // sieht dann ~0 Delta und blendet den Titel nicht aus (nur Nutzer-Scrolls zählen).
+  spieleKopfLetzteY = zielY;
+  window.scrollTo(0, zielY);
+}
+
+/* Titel im Spiele-Tab beim manuellen Runterscrollen ausblenden, beim
+   Hochscrollen wieder zeigen (v0.3). Der programmatische Sprung oben setzt die
+   Basis vorab, sein Scroll-Event erzeugt daher kein Delta. */
+function spieleKopfBeobachten() {
+  let geplant = false;
+  const auswerten = () => {
+    geplant = false;
+    const kopf = document.querySelector(".spiele-kopf");
+    if (!kopf || el("view-spiele").hidden) {
+      spieleKopfLetzteY = window.scrollY;
+      return;
+    }
+    const y = window.scrollY;
+    const dy = y - spieleKopfLetzteY;
+    if (Math.abs(dy) < 6) return; // Mikro-Jitter ignorieren, Basis nicht verschieben
+    if (dy > 0 && y > 72) kopf.classList.add("titel-weg");
+    else if (dy < 0) kopf.classList.remove("titel-weg");
+    spieleKopfLetzteY = y;
+  };
+  window.addEventListener(
+    "scroll",
+    () => {
+      if (!geplant) {
+        geplant = true;
+        requestAnimationFrame(auswerten);
+      }
+    },
+    { passive: true }
+  );
 }
 
 /* ---------- Wisch-Navigation zwischen den Haupt-Tabs (v0.2) ----------
@@ -3112,6 +3153,7 @@ function tipperFormkette(form) {
         ? `Serie: ${treffer} Treffer in Folge`
         : "Letzte Tipps, neueste zuerst";
   return `<span class="formkette klein${serie}" title="${serienTitel}" aria-label="${serienTitel}">${form
+    .slice(0, 3)
     .map(
       (p) => `<span class="form-punkt ${klasse(p)}" title="+${p} (${titel(p)})">${symbol(p)}</span>`
     )
@@ -3615,21 +3657,26 @@ function base64ZuUint8(base64) {
   return Uint8Array.from(roh, (zeichen) => zeichen.charCodeAt(0));
 }
 
+// Fein-Einstellungen teilen die Sichtbarkeit des Master-Schalters: nur zeigen,
+// wenn Push wirklich abonniert ist (v0.3).
+const PUSH_UNTERZEILEN = ["teamTorZeile", "anpfiffZeile", "chatPushZeile", "erinnerungZeile"];
+
 async function pushStatusLaden() {
   const zeile = el("pushZeile");
   const schalter = el("pushSchalter");
-  const erinnerung = el("erinnerungZeile");
   const hinweis = el("pushHinweis");
+  const subSetzen = (sichtbar) =>
+    PUSH_UNTERZEILEN.forEach((id) => (el(id).hidden = !sichtbar));
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
     zeile.hidden = true;
-    erinnerung.hidden = true;
+    subSetzen(false);
     return;
   }
   try {
     const info = await api("/api/push/vapid-key");
     if (!info.aktiv) {
       zeile.hidden = true;
-      erinnerung.hidden = true;
+      subSetzen(false);
       hinweis.textContent = "Push ist auf dem Server nicht konfiguriert (VAPID-Schlüssel fehlen).";
       hinweis.hidden = zustand.nutzer?.rolle !== "admin";
       return;
@@ -3640,15 +3687,18 @@ async function pushStatusLaden() {
     zeile.hidden = false;
     schalter.checked = zustand.pushAktiv;
     schalter.dataset.publicKey = info.public_key;
-    // Vorlaufzeit der Tipp-Erinnerung nur zeigen, wenn Push überhaupt ankommt
-    erinnerung.hidden = !zustand.pushAktiv;
+    // Fein-Einstellungen nur zeigen, wenn Push überhaupt ankommt
+    subSetzen(zustand.pushAktiv);
     if (zustand.pushAktiv) {
       const ich = await api("/api/me");
       el("erinnerungVorlauf").value = String(ich.tipp_erinnerung_minuten ?? 120);
+      el("anpfiffVorlauf").value = String(ich.anpfiff_erinnerung_minuten ?? 60);
+      el("teamTorSchalter").checked = ich.push_team_tore !== false; // Standard: an
+      el("chatPushSchalter").checked = Boolean(ich.push_chat);
     }
   } catch {
     zeile.hidden = true;
-    erinnerung.hidden = true;
+    subSetzen(false);
   }
 }
 
@@ -3884,6 +3934,7 @@ function adminMeldung(text, istFehler = false) {
 
 async function verwaltungLaden() {
   mehrTabAnwenden();
+  changelogRendern();
   await pushStatusLaden();
   api("/api/health")
     .then((info) => {
@@ -3926,6 +3977,71 @@ function mehrTabAnwenden() {
   for (const panel of document.querySelectorAll("[data-mehr-panel]")) {
     panel.hidden = panel.dataset.mehrPanel !== tab;
   }
+}
+
+/* Patchnotizen (v0.3): kurze, verständliche Liste der Neuerungen je Version —
+   neueste oben und aufgeklappt. Rein statisch im Frontend gepflegt. */
+const CHANGELOG = [
+  {
+    version: "0.3.0",
+    datum: "14. Juni 2026",
+    punkte: [
+      "Mitteilungen fein einstellbar: Chat-Push, Anpfiff deiner Lieblingsteams (bis 1 Std. vorher) und Tore & Endstand lassen sich jetzt einzeln an- und ausschalten.",
+      "Rangliste: Die Form zeigt nur noch die letzten 3 Spiele — so bleibt der Name vollständig lesbar.",
+      "Spiele-Tab: Der Titel bleibt beim Öffnen stehen und klappt erst beim Runterscrollen weg.",
+      "Neu: diese Patchnotizen unter „Mehr“ → „App“.",
+    ],
+  },
+  {
+    version: "0.2.0",
+    datum: "Juni 2026",
+    punkte: [
+      "Gruppenchat für die ganze Tipprunde — live, mit Emoji-Reaktionen.",
+      "Nutzerprofile mit Abzeichen und Tagessieger-Chip.",
+      "Lieblingsteams (Favoriten) mit Push zu Anpfiff, Toren und Endstand.",
+      "Spielerfotos, Kader und eine Spieler-Lupe.",
+      "Bonusfragen mit mehreren richtigen Antworten.",
+      "Wischen wechselt zwischen den Tabs.",
+    ],
+  },
+  {
+    version: "0.1.2",
+    datum: "Mai 2026",
+    punkte: [
+      "Selbst-Registrierung mit Gruppen-Passwort.",
+      "PIN selbst ändern.",
+    ],
+  },
+  {
+    version: "0.1.1",
+    datum: "Mai 2026",
+    punkte: [
+      "Profilbilder, Aufstellungen und Wettquoten.",
+      "Private Spiel-Notizen und ein Feedback-Knopf.",
+    ],
+  },
+  {
+    version: "0.1.0",
+    datum: "April 2026",
+    punkte: [
+      "Erste Version: Tippen, Rangliste, Live-Ticker, Turnierbaum und News.",
+    ],
+  },
+];
+
+function changelogRendern() {
+  const ziel = el("changelogListe");
+  if (!ziel) return;
+  htmlAktualisieren(
+    ziel,
+    CHANGELOG.map(
+      (eintrag, index) => `<details class="changelog-eintrag"${index === 0 ? " open" : ""}>
+        <summary><span class="changelog-version">v${escapeHtml(eintrag.version)}</span>
+          <span class="changelog-datum">${escapeHtml(eintrag.datum)}</span></summary>
+        <ul>${eintrag.punkte.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul>
+      </details>`
+    ).join("")
+  );
 }
 
 async function nutzerLaden() {
@@ -4256,6 +4372,47 @@ function mehrEreignisse() {
       fehlerAnzeigen(fehler);
     }
   });
+  el("anpfiffVorlauf").addEventListener("change", async (ereignis) => {
+    try {
+      const minuten = Number(ereignis.target.value);
+      await api("/api/me/einstellungen", {
+        method: "PATCH",
+        body: JSON.stringify({ anpfiff_erinnerung_minuten: minuten }),
+      });
+      if (zustand.nutzer) zustand.nutzer.anpfiff_erinnerung_minuten = minuten;
+      toast(minuten === 0 ? "Anpfiff-Erinnerung aus" : "Anpfiff-Erinnerung gespeichert ✓");
+    } catch (fehler) {
+      fehlerAnzeigen(fehler);
+    }
+  });
+  el("teamTorSchalter").addEventListener("change", async (ereignis) => {
+    const an = ereignis.target.checked;
+    try {
+      await api("/api/me/einstellungen", {
+        method: "PATCH",
+        body: JSON.stringify({ push_team_tore: an }),
+      });
+      if (zustand.nutzer) zustand.nutzer.push_team_tore = an;
+      toast(an ? "Tore & Endstand an ✓" : "Tore & Endstand aus");
+    } catch (fehler) {
+      ereignis.target.checked = !an; // Fehlschlag: Schalter zurückstellen
+      fehlerAnzeigen(fehler);
+    }
+  });
+  el("chatPushSchalter").addEventListener("change", async (ereignis) => {
+    const an = ereignis.target.checked;
+    try {
+      await api("/api/me/einstellungen", {
+        method: "PATCH",
+        body: JSON.stringify({ push_chat: an }),
+      });
+      if (zustand.nutzer) zustand.nutzer.push_chat = an;
+      toast(an ? "Chat-Mitteilungen an ✓" : "Chat-Mitteilungen aus");
+    } catch (fehler) {
+      ereignis.target.checked = !an; // Fehlschlag: Schalter zurückstellen
+      fehlerAnzeigen(fehler);
+    }
+  });
 
   // Feedback/Fehler melden (v0.1.1): Kategorie-Wahl + Formular
   el("feedbackKategorie").addEventListener("click", (ereignis) => {
@@ -4577,6 +4734,11 @@ async function appStarten(zielAnsicht = "heute") {
   if (treffer) {
     spielLupeOeffnen(Number(treffer[1])).catch(() => {});
     history.replaceState(null, "", location.pathname);
+  } else if (location.hash === "#chat") {
+    // Push-Klick auf /#chat: Rangliste zeigen und den Gruppenchat öffnen (v0.3)
+    zeigeAnsicht("rangliste");
+    chatOeffnen().catch(() => {});
+    history.replaceState(null, "", location.pathname);
   }
 }
 
@@ -4589,6 +4751,7 @@ async function start() {
     knopf.addEventListener("click", () => zeigeAnsicht(knopf.dataset.view));
   }
   wischNavigationEinrichten();
+  spieleKopfBeobachten();
   spieleEreignisse();
   heuteEreignisse();
   ranglisteEreignisse();

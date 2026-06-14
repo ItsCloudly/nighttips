@@ -24,6 +24,7 @@ ANLASS_ANPFIFF = "anpfiff"
 ANLASS_TOR = "tor"
 ANLASS_ENDSTAND = "endstand"
 ANLASS_TIPP_ERINNERUNG = "tipp_erinnerung"
+ANLASS_CHAT = "chat"  # v0.3: neue Gruppenchat-Nachricht
 
 
 def aktiv(einstellungen: Einstellungen) -> bool:
@@ -137,18 +138,25 @@ def _spiel_info(conn: sqlite3.Connection, spiel_id: int) -> sqlite3.Row | None:
     ).fetchone()
 
 
-def _pin_nutzer(conn: sqlite3.Connection, spiel: sqlite3.Row) -> list[int]:
+def _pin_nutzer(
+    conn: sqlite3.Connection, spiel: sqlite3.Row, *, pref: str | None = None
+) -> list[int]:
     """Nutzer, die eines der beteiligten Teams als Favorit markiert haben.
 
-    v0.2: Favoriten sind Teams — alte Spiel-Pins liegen zwar noch in der
-    Tabelle, lösen aber bewusst keine Pushes mehr aus (die UI bietet sie
-    nicht mehr an, niemand könnte sie abbestellen).
+    pref: optionaler nutzer-Schalter (feste Whitelist), der auf 1 stehen muss
+    — z. B. 'push_team_tore' (v0.3). v0.2: Favoriten sind Teams; alte Spiel-Pins
+    liegen zwar noch in der Tabelle, lösen aber bewusst keine Pushes mehr aus.
     """
+    sql = (
+        "SELECT DISTINCT n.id FROM pin p JOIN nutzer n ON n.id = p.nutzer_id"
+        " WHERE p.typ = 'team' AND p.ref_id IN (?, ?)"
+    )
+    if pref == "push_team_tore":  # feste Whitelist, kein dynamischer Spaltenname
+        sql += " AND n.push_team_tore = 1"
     zeilen = conn.execute(
-        "SELECT DISTINCT nutzer_id FROM pin WHERE typ = 'team' AND ref_id IN (?, ?)",
-        (spiel["heim_team_id"] or -1, spiel["gast_team_id"] or -1),
+        sql, (spiel["heim_team_id"] or -1, spiel["gast_team_id"] or -1)
     ).fetchall()
-    return [zeile["nutzer_id"] for zeile in zeilen]
+    return [zeile["id"] for zeile in zeilen]
 
 
 def ereignis_pushen(
@@ -164,7 +172,8 @@ def ereignis_pushen(
     spiel = _spiel_info(conn, spiel_id)
     if spiel is None:
         return 0
-    nutzer = _pin_nutzer(conn, spiel)
+    # Tore & Endstand nur an Lieblingsteam-Pinner, die diese Pushes anhaben (v0.3)
+    nutzer = _pin_nutzer(conn, spiel, pref="push_team_tore")
     if not nutzer:
         return 0
     paarung = f"{spiel['heim_name']} – {spiel['gast_name']}"
@@ -216,15 +225,29 @@ def erinnerungen_pruefen(conn: sqlite3.Connection, einstellungen: Einstellungen)
             continue
         paarung = f"{spiel['heim_name']} – {spiel['gast_name']}"
         anstoss = spiel["anstoss_utc"]
-        # Anpfiff-Erinnerung nur im engeren Fenster (Standard 30 Minuten)
-        if anstoss <= iso_utc(jetzt + timedelta(minutes=einstellungen.anpfiff_erinnerung_minuten)):
-            nutzer = _pin_nutzer(conn, spiel)
-            if nutzer:
-                gesendet += senden(
-                    conn, einstellungen, nutzer_ids=nutzer, anlass=ANLASS_ANPFIFF,
-                    ref_id=spiel["id"], titel="Gleich Anpfiff",
-                    text=paarung, url=f"/#spiel-{spiel['id']}",
-                )
+        # Anpfiff-Erinnerung für Lieblingsteams mit persönlichem Vorlauf (v0.3):
+        # nutzer.anpfiff_erinnerung_minuten — NULL = Server-Standard, 0 = aus.
+        anpfiff_kandidaten = conn.execute(
+            "SELECT DISTINCT n.id, n.anpfiff_erinnerung_minuten FROM pin p"
+            " JOIN nutzer n ON n.id = p.nutzer_id"
+            " WHERE p.typ = 'team' AND p.ref_id IN (?, ?)",
+            (spiel["heim_team_id"] or -1, spiel["gast_team_id"] or -1),
+        ).fetchall()
+        faellige_anpfiff = []
+        for person in anpfiff_kandidaten:
+            vorlauf = person["anpfiff_erinnerung_minuten"]
+            if vorlauf is None:
+                vorlauf = einstellungen.anpfiff_erinnerung_minuten
+            if vorlauf <= 0:
+                continue
+            if anstoss <= iso_utc(jetzt + timedelta(minutes=vorlauf)):
+                faellige_anpfiff.append(person["id"])
+        if faellige_anpfiff:
+            gesendet += senden(
+                conn, einstellungen, nutzer_ids=faellige_anpfiff, anlass=ANLASS_ANPFIFF,
+                ref_id=spiel["id"], titel="Gleich Anpfiff",
+                text=paarung, url=f"/#spiel-{spiel['id']}",
+            )
         # Tipp-Erinnerung an alle ohne Tipp (Nicht-KI), deren persönliches
         # Fenster den Anstoß schon erreicht hat
         ohne_tipp = conn.execute(
@@ -252,3 +275,57 @@ def erinnerungen_pruefen(conn: sqlite3.Connection, einstellungen: Einstellungen)
                 url=f"/#spiel-{spiel['id']}",
             )
     return gesendet
+
+
+def chat_benachrichtigen(
+    einstellungen: Einstellungen, *, nachricht_id: int, autor_id: int
+) -> int:
+    """Push für eine neue Gruppenchat-Nachricht (v0.3) an alle mit aktiviertem
+    Chat-Push — außer den Autor selbst.
+
+    Läuft als Hintergrund-Task mit EIGENER DB-Verbindung (der Request-Connection
+    ist nach der Antwort längst zu); Fehler bleiben für den Chat folgenlos.
+    Dedup über push_versand (Anlass 'chat' + nachricht_id) ⇒ je Nachricht
+    höchstens eine Meldung pro Empfänger.
+    """
+    if not aktiv(einstellungen):
+        return 0
+    try:
+        conn = db.verbinden(einstellungen.db_pfad)
+    except Exception:
+        logger.exception("Chat-Push: DB nicht erreichbar")
+        return 0
+    try:
+        nachricht = conn.execute(
+            "SELECT n.inhalt, nu.anzeigename FROM nachricht n"
+            " JOIN nutzer nu ON nu.id = n.nutzer_id WHERE n.id = ?",
+            (nachricht_id,),
+        ).fetchone()
+        if nachricht is None:
+            return 0
+        empfaenger = [
+            zeile["id"]
+            for zeile in conn.execute(
+                "SELECT id FROM nutzer WHERE push_chat = 1 AND id != ?", (autor_id,)
+            ).fetchall()
+        ]
+        if not empfaenger:
+            return 0
+        text = nachricht["inhalt"]
+        if len(text) > 120:
+            text = text[:119] + "…"
+        return senden(
+            conn,
+            einstellungen,
+            nutzer_ids=empfaenger,
+            anlass=ANLASS_CHAT,
+            ref_id=nachricht_id,
+            titel=f"💬 {nachricht['anzeigename']}",
+            text=text,
+            url="/#chat",
+        )
+    except Exception:
+        logger.exception("Chat-Push fehlgeschlagen")
+        return 0
+    finally:
+        conn.close()

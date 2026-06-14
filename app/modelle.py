@@ -29,12 +29,25 @@ class NutzerInfo(BaseModel):
     ki_freigeschaltet: bool = False
     # Persönliche Vorlaufzeit der Tipp-Erinnerung (None = Server-Standard, 0 = aus)
     tipp_erinnerung_minuten: int | None = Field(default=None, ge=0, le=720)
+    # Push-Vorlieben (v0.3): Anpfiff-Vorlauf der Lieblingsteams (None =
+    # Server-Standard, 0 = aus), Chat-Mitteilungen, Tore/Endstand der Teams.
+    anpfiff_erinnerung_minuten: int | None = Field(default=None, ge=0, le=720)
+    push_chat: bool = False
+    push_team_tore: bool = True
     # Dateiname des Profilbilds (None = Initialen-Avatar)
     profilbild: str | None = None
 
 
 class ErinnerungsEinstellung(BaseModel):
-    tipp_erinnerung_minuten: int = Field(ge=0, le=720)
+    """Push-Einstellungen (v0.3): nur gesetzte Felder werden geändert.
+
+    None heißt „unverändert lassen"; bei den Minuten-Feldern bedeutet 0 „aus".
+    """
+
+    tipp_erinnerung_minuten: int | None = Field(default=None, ge=0, le=720)
+    anpfiff_erinnerung_minuten: int | None = Field(default=None, ge=0, le=720)
+    push_chat: bool | None = None
+    push_team_tore: bool | None = None
 
 
 class NameAenderung(BaseModel):

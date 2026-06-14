@@ -275,9 +275,10 @@ def rangliste(
     return ergebnis
 
 
-def _tipp_formketten(conn: sqlite3.Connection, limit: int = 5) -> dict[int, list[int]]:
+def _tipp_formketten(conn: sqlite3.Connection, limit: int = 3) -> dict[int, list[int]]:
     """Punkte der letzten gewerteten Tipps je Nutzer, neueste zuerst —
-    die "Formkette" in der Rangliste."""
+    die "Formkette" in der Rangliste. Höchstens die letzten 3 Spiele, sonst
+    bleibt auf schmalen Handys kein Platz mehr für den Namen (v0.3)."""
     zeilen = conn.execute(
         """
         SELECT nutzer_id, punkte FROM (

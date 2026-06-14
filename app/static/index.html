@@ -9,9 +9,9 @@
 <link rel="icon" href="/icons/icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="/icons/icon-180.png">
 <link rel="preload" href="/fonts/space-grotesk-var.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/styles.css?v=44">
+<link rel="stylesheet" href="/styles.css?v=45">
 <!-- FOUC-Schutz: Modus vor dem ersten Rendern setzen; extern statt inline (CSP) -->
-<script src="/boot.js?v=44"></script>
+<script src="/boot.js?v=45"></script>
 </head>
 <body>
 <div class="app-shell">
@@ -112,13 +112,15 @@
     </section>
 
     <section id="view-spiele" class="view" hidden>
+      <!-- v0.3: Titel + Filterblock kleben gemeinsam oben. Der Titel klappt
+           beim manuellen Runterscrollen weg, beim Hochscrollen wieder ein;
+           der Auto-Sprung zum aktuellen Spiel lässt ihn stehen. -->
+      <div class="spiele-kopf">
       <header class="seitenkopf seitenkopf-kompakt">
         <div class="kopfzeile">
           <h1>Spiele</h1>
         </div>
       </header>
-      <!-- Außerhalb des Headers, damit position:sticky über die ganze
-           Section trägt (im Header endete der Klebebereich sofort). -->
       <div class="spiele-filter-block">
           <details id="spieleKalender" class="kalender">
             <summary id="kalenderZusammenfassung" class="kalender-kopf"></summary>
@@ -154,6 +156,7 @@
             <button type="button" id="filterTeamKnopf" class="team-filter-knopf"
                     aria-label="Nach Team filtern" title="Nach Team filtern"></button>
           </div>
+      </div>
       </div>
       <div id="spieleListe" class="liste"></div>
     </section>
@@ -286,8 +289,27 @@
           <div class="einstellung-liste">
             <label class="toggle-zeile master" id="pushZeile" hidden>
               <span><strong>Benachrichtigungen</strong><br>
-                <span class="hinweis-zeile">Tore, Anpfiff &amp; Endstand aufs Handy</span></span>
+                <span class="hinweis-zeile">Push aufs Handy — was ankommt, stellst du unten ein</span></span>
               <span class="schalter"><input id="pushSchalter" type="checkbox"><span class="schalter-knauf"></span></span>
+            </label>
+            <label class="toggle-zeile" id="teamTorZeile" hidden>
+              <span><strong>Tore &amp; Endstand</strong><br>
+                <span class="hinweis-zeile">Live-Ergebnisse deiner Lieblingsteams</span></span>
+              <span class="schalter"><input id="teamTorSchalter" type="checkbox"><span class="schalter-knauf"></span></span>
+            </label>
+            <div class="toggle-zeile" id="anpfiffZeile" hidden>
+              <span><strong>Anpfiff deiner Teams</strong><br>
+                <span class="hinweis-zeile">Erinnerung, wenn ein Lieblingsteam bald spielt</span></span>
+              <select id="anpfiffVorlauf" aria-label="Vorlaufzeit der Anpfiff-Erinnerung">
+                <option value="0">Aus</option>
+                <option value="30">30 Min. vorher</option>
+                <option value="60">1 Std. vorher</option>
+              </select>
+            </div>
+            <label class="toggle-zeile" id="chatPushZeile" hidden>
+              <span><strong>Chat-Mitteilungen</strong><br>
+                <span class="hinweis-zeile">Push bei neuen Nachrichten im Gruppenchat</span></span>
+              <span class="schalter"><input id="chatPushSchalter" type="checkbox"><span class="schalter-knauf"></span></span>
             </label>
             <div class="toggle-zeile" id="erinnerungZeile" hidden>
               <span><strong>Tipp-Erinnerung</strong><br>
@@ -307,6 +329,10 @@
         </div>
         </div>
         <div data-mehr-panel="app" hidden>
+        <div class="karte">
+          <h2>Was ist neu</h2>
+          <div id="changelogListe" class="changelog"></div>
+        </div>
         <div class="karte">
           <h2>Entdecken</h2>
           <div class="knopfzeile">
@@ -477,6 +503,6 @@
 
   <div id="toast" class="toast" hidden></div>
 </div>
-<script src="/app.js?v=44"></script>
+<script src="/app.js?v=45"></script>
 </body>
 </html>

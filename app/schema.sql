@@ -165,7 +165,15 @@ CREATE TABLE IF NOT EXISTS nutzer (
     tipp_erinnerung_minuten INTEGER,
     -- Dateiname des Profilbilds in daten/profilbilder/ (NULL = Initiale).
     -- Der Zeitstempel im Namen macht die Auslieferungs-URL cache-sicher.
-    profilbild TEXT
+    profilbild TEXT,
+    -- Push-Vorlieben (v0.3, Bestands-DBs: Migration in db.py):
+    -- push_chat: Mitteilung bei neuen Chat-Nachrichten (opt-in, Standard aus).
+    -- push_team_tore: Tore & Endstand der Lieblingsteams (Standard an).
+    -- anpfiff_erinnerung_minuten: Vorlauf der Anpfiff-Erinnerung für
+    --   Lieblingsteams (NULL = Server-Standard, 0 = aus).
+    push_chat INTEGER NOT NULL DEFAULT 0,
+    push_team_tore INTEGER NOT NULL DEFAULT 1,
+    anpfiff_erinnerung_minuten INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS tipp (

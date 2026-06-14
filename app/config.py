@@ -76,7 +76,9 @@ class Einstellungen:
     vapid_public_key: str = ""
     vapid_subject: str = "mailto:admin@example.invalid"
     tipp_erinnerung_minuten: int = 120
-    anpfiff_erinnerung_minuten: int = 30
+    # v0.3: Standard-Vorlauf der Anpfiff-Erinnerung 1 Stunde (war 30 Min.) —
+    # je Nutzer über nutzer.anpfiff_erinnerung_minuten übersteuerbar.
+    anpfiff_erinnerung_minuten: int = 60
     # Aufstellungen via inoffizieller ESPN-API (v0.1.1): kostenlos, kein Key.
     # WM26_AUFSTELLUNGEN=0 schaltet den Poll ab.
     aufstellungen_aktiv: bool = True
@@ -117,7 +119,7 @@ def lade_einstellungen() -> Einstellungen:
         vapid_public_key=os.environ.get("WM26_VAPID_PUBLIC_KEY", ""),
         vapid_subject=os.environ.get("WM26_VAPID_SUBJECT", "mailto:admin@example.invalid"),
         tipp_erinnerung_minuten=_int("WM26_TIPP_ERINNERUNG_MINUTEN", 120),
-        anpfiff_erinnerung_minuten=_int("WM26_ANPFIFF_ERINNERUNG_MINUTEN", 30),
+        anpfiff_erinnerung_minuten=_int("WM26_ANPFIFF_ERINNERUNG_MINUTEN", 60),
         aufstellungen_aktiv=_bool("WM26_AUFSTELLUNGEN", True),
         aufstellungen_basis_url=os.environ.get(
             "WM26_AUFSTELLUNGEN_BASIS_URL",

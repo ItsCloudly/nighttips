@@ -9,12 +9,13 @@ from __future__ import annotations
 import sqlite3
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from .. import ratelimit
-from ..abhaengigkeiten import aktueller_nutzer, get_db
-from ..services import chat
+from ..abhaengigkeiten import aktueller_nutzer, get_db, get_einstellungen
+from ..config import Einstellungen
+from ..services import chat, push
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -42,8 +43,10 @@ def chat_lesen(
 @router.post("", status_code=201)
 def chat_schreiben(
     eingabe: NachrichtEingabe,
+    hintergrund: BackgroundTasks,
     nutzer: Annotated[sqlite3.Row, Depends(aktueller_nutzer)],
     conn: Annotated[sqlite3.Connection, Depends(get_db)],
+    einstellungen: Annotated[Einstellungen, Depends(get_einstellungen)],
 ) -> dict[str, Any]:
     if not ratelimit.erlaubt(f"chat:{nutzer['id']}", limit=10, fenster_sekunden=60):
         raise HTTPException(
@@ -56,6 +59,14 @@ def chat_schreiben(
     except ValueError as fehler:
         raise HTTPException(status_code=422, detail=str(fehler)) from None
     chat.nachricht_publizieren(conn, nachricht_id)
+    # Web-Push an alle mit aktiviertem Chat-Push (v0.3) — im Hintergrund nach
+    # der Antwort, mit eigener DB-Verbindung; blockiert den POST nicht.
+    hintergrund.add_task(
+        push.chat_benachrichtigen,
+        einstellungen,
+        nachricht_id=nachricht_id,
+        autor_id=nutzer["id"],
+    )
     return chat.nachricht_json(conn, nachricht_id)
 
 

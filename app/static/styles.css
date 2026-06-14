@@ -224,15 +224,31 @@ main .view.wechsel-rechts:not([hidden]) { animation: view-wisch-rechts 0.26s var
   margin-top: 12px;
 }
 
-/* Spiele-Tab: Kalender + Filter bleiben beim Scrollen oben kleben (v0.2),
-   nur die Spieleliste zieht darunter durch. Weicher Verlauf statt harter
-   Kante (gleiches Muster wie die Pill-Tabs in der Lupe). Der Block lebt
-   als Geschwister des Seitenkopfs direkt in der Section — als Kind des
-   Headers würde sticky sofort am Header-Ende abreißen. */
-.spiele-filter-block {
+/* Spiele-Tab (v0.3): Titel + Kalender/Filter kleben gemeinsam oben, nur die
+   Spieleliste zieht darunter durch. Der Titel klappt beim manuellen
+   Runterscrollen weg (.titel-weg) und beim Hochscrollen wieder ein — der
+   Auto-Sprung zum aktuellen Spiel lässt ihn ausdrücklich stehen. */
+.spiele-kopf {
   position: sticky;
   top: 0;
   z-index: 30;
+}
+.spiele-kopf .seitenkopf-kompakt {
+  background: var(--bg);
+  overflow: hidden;
+  max-height: 96px;
+  transition: max-height 0.24s var(--ease-aus), opacity 0.2s ease,
+              padding-top 0.24s var(--ease-aus), padding-bottom 0.24s var(--ease-aus);
+}
+.spiele-kopf.titel-weg .seitenkopf-kompakt {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+/* Weicher Verlauf statt harter Kante; das Kleben übernimmt jetzt der Wrapper. */
+.spiele-filter-block {
+  position: static;
   padding: 2px 2px 12px;
   margin-bottom: 4px;
   background: linear-gradient(180deg, var(--bg) 84%, transparent);
@@ -3507,4 +3523,51 @@ span.kader-foto.platzhalter {
   display: block;
   border-radius: var(--ns-radius-hero) var(--ns-radius-hero) 0 0;
   margin-bottom: 12px;
+}
+
+/* Patchnotizen (v0.3): aufklappbare Versionsliste unter „Mehr“ → „App“. */
+.changelog-eintrag {
+  border-bottom: 1px solid var(--linie);
+}
+.changelog-eintrag:last-child {
+  border-bottom: 0;
+}
+.changelog-eintrag > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 0;
+  list-style: none;
+}
+.changelog-eintrag > summary::-webkit-details-marker {
+  display: none;
+}
+.changelog-eintrag > summary::before {
+  content: "›";
+  display: inline-block;
+  color: var(--ink-2);
+  transition: transform 0.18s ease;
+}
+.changelog-eintrag[open] > summary::before {
+  transform: rotate(90deg);
+}
+.changelog-version {
+  font-weight: 700;
+  color: var(--akzent);
+  font-family: var(--ns-mono, monospace);
+}
+.changelog-datum {
+  color: var(--ink-2);
+  font-size: 0.85rem;
+}
+.changelog-eintrag ul {
+  margin: 2px 0 12px;
+  padding-left: 20px;
+}
+.changelog-eintrag li {
+  margin: 5px 0;
+  color: var(--ink);
+  font-size: 0.92rem;
+  line-height: 1.45;
 }

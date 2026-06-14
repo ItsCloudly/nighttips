@@ -49,6 +49,14 @@ def _migrationen(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE nutzer ADD COLUMN tipp_erinnerung_minuten INTEGER")
     if "profilbild" not in nutzer_spalten:
         conn.execute("ALTER TABLE nutzer ADD COLUMN profilbild TEXT")
+    # Push-Vorlieben (v0.3): Chat-Mitteilungen, Tore/Endstand der Lieblingsteams,
+    # persönlicher Anpfiff-Vorlauf. Bestehende Pinner behalten Tore/Endstand (1).
+    if "push_chat" not in nutzer_spalten:
+        conn.execute("ALTER TABLE nutzer ADD COLUMN push_chat INTEGER NOT NULL DEFAULT 0")
+    if "push_team_tore" not in nutzer_spalten:
+        conn.execute("ALTER TABLE nutzer ADD COLUMN push_team_tore INTEGER NOT NULL DEFAULT 1")
+    if "anpfiff_erinnerung_minuten" not in nutzer_spalten:
+        conn.execute("ALTER TABLE nutzer ADD COLUMN anpfiff_erinnerung_minuten INTEGER")
     spiel_spalten = {zeile["name"] for zeile in conn.execute("PRAGMA table_info(spiel)")}
     if "espn_ref" not in spiel_spalten:
         conn.execute("ALTER TABLE spiel ADD COLUMN espn_ref TEXT")

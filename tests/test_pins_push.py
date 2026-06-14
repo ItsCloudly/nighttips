@@ -242,3 +242,108 @@ def test_push_endpunkte(client, conn, push_einstellungen, einstellungen, monkeyp
     )
     anzahl = conn.execute("SELECT COUNT(*) AS n FROM push_subscription").fetchone()["n"]
     assert anzahl == 0
+
+
+# ---------- v0.3: granulare Push-Vorlieben + Chat-Push ----------
+
+
+def test_einstellungen_v3_teilupdate(client, conn):
+    """PATCH ändert nur die übergebenen Felder; /api/me spiegelt sie."""
+    nutzer_service.nutzer_anlegen(conn, anzeigename="Mia", pin="1234", akteur="test")
+    client.post("/api/login", json={"anzeigename": "Mia", "pin": "1234"})
+    me = client.get("/api/me").json()
+    assert me["anpfiff_erinnerung_minuten"] is None
+    assert me["push_chat"] is False
+    assert me["push_team_tore"] is True
+
+    antwort = client.patch(
+        "/api/me/einstellungen",
+        json={"anpfiff_erinnerung_minuten": 30, "push_chat": True, "push_team_tore": False},
+    )
+    assert antwort.status_code == 200
+    me = client.get("/api/me").json()
+    assert me["anpfiff_erinnerung_minuten"] == 30
+    assert me["push_chat"] is True
+    assert me["push_team_tore"] is False
+    # Nicht mitgeschickte Felder bleiben unverändert
+    assert me["tipp_erinnerung_minuten"] is None
+    # 0 (aus) erlaubt, mehr als 12 h nicht
+    assert client.patch("/api/me/einstellungen", json={"anpfiff_erinnerung_minuten": 0}).status_code == 200
+    assert (
+        client.patch("/api/me/einstellungen", json={"anpfiff_erinnerung_minuten": 9999}).status_code
+        == 422
+    )
+
+
+def test_tor_push_respektiert_schalter(conn, push_einstellungen, gesendete):
+    """Wer Tore & Endstand abbestellt (push_team_tore=0), bekommt keine."""
+    sync.stammdaten_sync(conn, push_einstellungen, api=ApiAttrappe(API_TEAMS, [_api_match()]))
+    team_ger = conn.execute("SELECT id FROM team WHERE fifa_code = 'GER'").fetchone()["id"]
+    fan = _nutzer_mit_abo(conn, "Fan", "https://push.example/fan")
+    stumm = _nutzer_mit_abo(conn, "Stumm", "https://push.example/stumm")
+    _pin(conn, fan, "team", team_ger)
+    _pin(conn, stumm, "team", team_ger)
+    with db_modul.schreib_transaktion(conn):
+        conn.execute("UPDATE nutzer SET push_team_tore = 0 WHERE id = ?", (stumm,))
+
+    live = _api_match()
+    live["status"] = "IN_PLAY"
+    live["score"] = {"winner": None, "duration": "REGULAR", "fullTime": {"home": 0, "away": 0}}
+    sync.ergebnis_sync(conn, push_einstellungen, api=ApiAttrappe(API_TEAMS, [live]))
+    tor = _api_match()
+    tor["status"] = "IN_PLAY"
+    tor["score"] = {"winner": None, "duration": "REGULAR", "fullTime": {"home": 1, "away": 0}}
+    sync.ergebnis_sync(conn, push_einstellungen, api=ApiAttrappe(API_TEAMS, [tor]))
+
+    assert [endpoint for endpoint, _ in gesendete] == ["https://push.example/fan"]
+
+
+def test_anpfiff_persoenlicher_vorlauf(conn, push_einstellungen, gesendete):
+    """Anpfiff-Vorlauf je Nutzer: NULL = Server-Standard (60), 0 = aus."""
+    match = _api_match()
+    match["utcDate"] = iso_utc(jetzt_utc() + timedelta(minutes=45))
+    sync.stammdaten_sync(conn, push_einstellungen, api=ApiAttrappe(API_TEAMS, [match]))
+    spiel_id = conn.execute("SELECT id FROM spiel").fetchone()["id"]
+    team_ger = conn.execute("SELECT id FROM team WHERE fifa_code = 'GER'").fetchone()["id"]
+    from app.services import tippspiel
+
+    standard = _nutzer_mit_abo(conn, "Standard", "https://push.example/standard")  # NULL → 60 → fällig
+    knapp = _nutzer_mit_abo(conn, "Knapp", "https://push.example/knapp")  # 30 → noch nicht
+    aus = _nutzer_mit_abo(conn, "Aus", "https://push.example/aus")  # 0 → aus
+    for nid in (standard, knapp, aus):
+        _pin(conn, nid, "team", team_ger)
+        # Tipp abgeben, damit die Tipp-Erinnerung den Anpfiff-Test nicht überlagert
+        tippspiel.tipp_abgeben(conn, nutzer_id=nid, spiel_id=spiel_id, tipp_heim=1, tipp_gast=0)
+    with db_modul.schreib_transaktion(conn):
+        conn.execute("UPDATE nutzer SET anpfiff_erinnerung_minuten = 30 WHERE id = ?", (knapp,))
+        conn.execute("UPDATE nutzer SET anpfiff_erinnerung_minuten = 0 WHERE id = ?", (aus,))
+
+    assert push.erinnerungen_pruefen(conn, push_einstellungen) == 1
+    assert [endpoint for endpoint, _ in gesendete] == ["https://push.example/standard"]
+    assert "Anpfiff" in gesendete[0][1]
+    # Dedup über push_versand: zweiter Lauf schickt nichts Neues
+    assert push.erinnerungen_pruefen(conn, push_einstellungen) == 0
+
+
+def test_chat_push_nur_abonnenten(conn, push_einstellungen, gesendete):
+    """Chat-Push geht nur an push_chat=1 — nie an den Autor selbst."""
+    from app.services import chat
+
+    autor = _nutzer_mit_abo(conn, "Autor", "https://push.example/autor")
+    leser = _nutzer_mit_abo(conn, "Leser", "https://push.example/leser")
+    _nutzer_mit_abo(conn, "Stumm", "https://push.example/stumm")  # push_chat = 0 (Standard)
+    with db_modul.schreib_transaktion(conn):
+        conn.execute("UPDATE nutzer SET push_chat = 1 WHERE id IN (?, ?)", (autor, leser))
+    nachricht_id = chat.nachricht_anlegen(conn, nutzer_id=autor, inhalt="Wer kommt heute?")
+
+    gesendet = push.chat_benachrichtigen(
+        push_einstellungen, nachricht_id=nachricht_id, autor_id=autor
+    )
+    assert gesendet == 1
+    assert [endpoint for endpoint, _ in gesendete] == ["https://push.example/leser"]
+    assert "Autor" in gesendete[0][1]  # Titel trägt den Namen
+    # Dieselbe Nachricht erneut → Dedup, nichts Neues
+    assert (
+        push.chat_benachrichtigen(push_einstellungen, nachricht_id=nachricht_id, autor_id=autor)
+        == 0
+    )
