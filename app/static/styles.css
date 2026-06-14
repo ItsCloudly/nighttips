@@ -188,8 +188,9 @@ a { color: var(--akzent); }
   to { transform: scaleX(1); opacity: 1; }
 }
 
-/* Ansichts-Wechsel: sanftes Aufsteigen beim Einblenden */
-main .view:not([hidden]) { animation: view-ein 0.3s var(--ease-aus) both; }
+/* Ansichts-Wechsel: sanftes Aufsteigen beim Einblenden — klassenbasiert (v0.3.2),
+   damit das Entfernen der Wisch-Klasse die Animation nicht erneut auslöst. */
+main .view.auftritt { animation: view-ein 0.3s var(--ease-aus) both; }
 
 @keyframes view-ein {
   from { opacity: 0; transform: translateY(10px); }

@@ -145,18 +145,19 @@ function zeigeAnsicht(name, wischRichtung = null) {
   for (const ansicht of ANSICHTEN) {
     el(`view-${ansicht}`).hidden = ansicht !== name;
   }
-  // Nach einem Wisch gleitet die neue Ansicht aus der Wischrichtung herein;
-  // die Klasse räumt sich nach der Animation selbst weg (Standard bleibt
-  // das sanfte Aufsteigen von view-ein).
-  if (wischRichtung) {
-    const ansicht = el(`view-${name}`);
-    ansicht.classList.add(`wechsel-${wischRichtung}`);
-    ansicht.addEventListener(
-      "animationend",
-      () => ansicht.classList.remove("wechsel-links", "wechsel-rechts"),
-      { once: true }
-    );
-  }
+  // Auftritts-Animation klassenbasiert (v0.3.2): Wisch ODER sanftes Aufsteigen,
+  // die Klasse räumt sich nach der Animation selbst weg. Bewusst KEINE breite
+  // :not([hidden])-Regel mehr — sonst löste das Entfernen der Wisch-Klasse die
+  // Aufsteig-Animation ein zweites Mal aus (das kurze Schwarz-Aufblitzen beim Wischen).
+  const eintritt = el(`view-${name}`);
+  eintritt.classList.remove("auftritt", "wechsel-links", "wechsel-rechts");
+  void eintritt.offsetWidth; // Reflow: dieselbe Klasse startet die Animation erneut
+  eintritt.classList.add(wischRichtung ? `wechsel-${wischRichtung}` : "auftritt");
+  eintritt.addEventListener(
+    "animationend",
+    () => eintritt.classList.remove("auftritt", "wechsel-links", "wechsel-rechts"),
+    { once: true }
+  );
   el("leiste").hidden = name === "login" || name === "onboarding";
   const navName = NAV_ZUORDNUNG[name] ?? name;
   for (const knopf of document.querySelectorAll("#leiste button")) {
@@ -3087,7 +3088,7 @@ async function ranglisteLaden() {
           <td class="rang-name">${avatarHtml(eintrag, "tipper-avatar mini")}${escapeHtml(eintrag.anzeigename)}${ki}</td>
           <td class="num">${eintrag.exakt}</td>
           <td class="num">${eintrag.differenz}</td>
-          <td class="num nur-breit">${eintrag.tendenz}</td>
+          <td class="num">${eintrag.tendenz}</td>
           <td class="rang-form">${tipperFormkette(eintrag.form)}</td>
           <td class="num rang-punkte"${bonus}>${eintrag.punkte}${livePrognoseChip(eintrag, mitLive)}</td>
         </tr>`;
@@ -3100,7 +3101,7 @@ async function ranglisteLaden() {
           <th>Tipper</th>
           <th class="num" title="Exakte Ergebnisse">4er</th>
           <th class="num" title="Richtige Tordifferenz">3er</th>
-          <th class="num nur-breit" title="Richtige Tendenz">2er</th>
+          <th class="num" title="Richtige Tendenz">2er</th>
           <th>Form</th>
           <th class="num">Pkt</th>
         </tr></thead>
@@ -3980,6 +3981,14 @@ function mehrTabAnwenden() {
 /* Patchnotizen (v0.3): kurze, verständliche Liste der Neuerungen je Version —
    neueste oben und aufgeklappt. Rein statisch im Frontend gepflegt. */
 const CHANGELOG = [
+  {
+    version: "0.3.2",
+    datum: "14. Juni 2026",
+    punkte: [
+      "Rangliste zeigt jetzt 4er-, 3er- und 2er-Punkte; bei wenig Platz wird eher der Name gekürzt als eine Punktespalte.",
+      "Tab-Wischen läuft flüssiger — kein kurzes Schwarz-Aufblitzen mehr beim Wechsel.",
+    ],
+  },
   {
     version: "0.3.1",
     datum: "14. Juni 2026",
