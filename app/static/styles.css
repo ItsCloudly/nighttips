@@ -232,17 +232,30 @@ main .view.wechsel-rechts:not([hidden]) { animation: view-wisch-rechts 0.26s var
   position: sticky;
   top: 0;
   z-index: 30;
+  /* v0.3.1: in der APK den Klebebereich unter Statusleiste/Notch halten; der
+     Wrapper trägt die Safe-Area + Hintergrund (im Web ist der Inset 0). */
+  padding-top: env(safe-area-inset-top);
+  background: var(--bg);
 }
 .spiele-kopf .seitenkopf-kompakt {
   background: var(--bg);
+  /* Safe-Area sitzt jetzt am Wrapper — hier nur das normale Polster. */
+  padding-top: 14px;
   overflow: hidden;
-  max-height: 96px;
-  transition: max-height 0.24s var(--ease-aus), opacity 0.2s ease,
-              padding-top 0.24s var(--ease-aus), padding-bottom 0.24s var(--ease-aus);
+  /* v0.3.1: max-height eng an der echten Höhe -> Wegklappen läuft proportional
+     und flüssig statt erst „tot" und dann ruckartig (war 96px). */
+  max-height: 64px;
+  transform: translateY(0);
+  transition: max-height 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.18s ease,
+              padding-top 0.26s cubic-bezier(0.4, 0, 0.2, 1),
+              padding-bottom 0.26s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .spiele-kopf.titel-weg .seitenkopf-kompakt {
   max-height: 0;
   opacity: 0;
+  transform: translateY(-8px);
   padding-top: 0;
   padding-bottom: 0;
 }

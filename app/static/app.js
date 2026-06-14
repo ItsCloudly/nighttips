@@ -3085,7 +3085,6 @@ async function ranglisteLaden() {
             aria-label="Profil von ${escapeHtml(eintrag.anzeigename)}">
           <td class="num rang-platz">${eintrag.platz}</td>
           <td class="rang-name">${avatarHtml(eintrag, "tipper-avatar mini")}${escapeHtml(eintrag.anzeigename)}${ki}</td>
-          <td class="num">${eintrag.tipps_gewertet}</td>
           <td class="num">${eintrag.exakt}</td>
           <td class="num">${eintrag.differenz}</td>
           <td class="num nur-breit">${eintrag.tendenz}</td>
@@ -3099,7 +3098,6 @@ async function ranglisteLaden() {
         <thead><tr>
           <th class="num" aria-label="Platz">#</th>
           <th>Tipper</th>
-          <th class="num" title="Gewertete Tipps">Sp</th>
           <th class="num" title="Exakte Ergebnisse">4er</th>
           <th class="num" title="Richtige Tordifferenz">3er</th>
           <th class="num nur-breit" title="Richtige Tendenz">2er</th>
@@ -3108,7 +3106,7 @@ async function ranglisteLaden() {
         </tr></thead>
         <tbody>${zeilen}</tbody>
       </table>
-      <p class="rang-fussnote">Sp = gewertete Tipps · 4er = exakt · 3er = Differenz · 2er = Tendenz${
+      <p class="rang-fussnote">4er = exakt · 3er = Differenz · 2er = Tendenz${
         mitBonus ? " · Pkt inkl. Bonuspunkte" : ""
       }${
         eintraege.some((eintrag) => eintrag.punkte_live > 0)
@@ -3983,6 +3981,16 @@ function mehrTabAnwenden() {
    neueste oben und aufgeklappt. Rein statisch im Frontend gepflegt. */
 const CHANGELOG = [
   {
+    version: "0.3.1",
+    datum: "14. Juni 2026",
+    punkte: [
+      "Spiele-Tab: Der Titel klappt jetzt flüssig weg, und Kalender + Filter bleiben sauber unter der Statusleiste.",
+      "Rangliste übersichtlicher: weniger Spalten — die Zahl der gewerteten Tipps steht jetzt im Profil (auf eine Person tippen).",
+      "Benachrichtigungen lassen sich auf dem Handy wieder aktivieren.",
+      "Patchnotizen mit korrekten Daten.",
+    ],
+  },
+  {
     version: "0.3.0",
     datum: "14. Juni 2026",
     punkte: [
@@ -3994,7 +4002,7 @@ const CHANGELOG = [
   },
   {
     version: "0.2.0",
-    datum: "Juni 2026",
+    datum: "12. Juni 2026",
     punkte: [
       "Gruppenchat für die ganze Tipprunde — live, mit Emoji-Reaktionen.",
       "Nutzerprofile mit Abzeichen und Tagessieger-Chip.",
@@ -4005,26 +4013,12 @@ const CHANGELOG = [
     ],
   },
   {
-    version: "0.1.2",
-    datum: "Mai 2026",
-    punkte: [
-      "Selbst-Registrierung mit Gruppen-Passwort.",
-      "PIN selbst ändern.",
-    ],
-  },
-  {
-    version: "0.1.1",
-    datum: "Mai 2026",
-    punkte: [
-      "Profilbilder, Aufstellungen und Wettquoten.",
-      "Private Spiel-Notizen und ein Feedback-Knopf.",
-    ],
-  },
-  {
     version: "0.1.0",
-    datum: "April 2026",
+    datum: "11. Juni 2026",
     punkte: [
       "Erste Version: Tippen, Rangliste, Live-Ticker, Turnierbaum und News.",
+      "Profilbilder, Aufstellungen, Wettquoten, private Notizen und Feedback-Knopf.",
+      "Selbst-Registrierung mit Gruppen-Passwort und PIN-Wechsel.",
     ],
   },
 ];
